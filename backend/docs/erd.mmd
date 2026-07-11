@@ -1,0 +1,331 @@
+```mermaid
+erDiagram
+    Accused {
+      AccusedMasterID INTEGER [PK]
+      CaseMasterID INTEGER [FK] "nullable"
+      AccusedName VARCHAR(200)
+      AgeYear INTEGER "nullable"
+      GenderID INTEGER "nullable"
+      PersonID VARCHAR(10) "nullable"
+      photo_url TEXT "nullable"
+      photo_hash TEXT "nullable"
+      address TEXT "nullable"
+      is_known_criminal BOOLEAN "nullable"
+      criminal_history TEXT "nullable"
+    }
+
+    Act {
+      ActCode VARCHAR(50) [PK]
+      ActDescription VARCHAR(500) "nullable"
+      ShortName VARCHAR(100) "nullable"
+      Active BOOLEAN "nullable"
+    }
+
+    ActSectionAssociation {
+      CaseMasterID INTEGER [PK,FK]
+      ActID VARCHAR(50) [PK,FK]
+      SectionID VARCHAR(50) [PK]
+      ActOrderID INTEGER "nullable"
+      SectionOrderID INTEGER "nullable"
+    }
+
+    ArrestSurrender {
+      ArrestSurrenderID INTEGER [PK]
+      CaseMasterID INTEGER [FK] "nullable"
+      ArrestSurrenderTypeID INTEGER "nullable"
+      ArrestSurrenderDate DATE "nullable"
+      ArrestSurrenderStateId INTEGER [FK] "nullable"
+      ArrestSurrenderDistrictId INTEGER [FK] "nullable"
+      PoliceStationID INTEGER [FK] "nullable"
+      IOID INTEGER [FK] "nullable"
+      CourtID INTEGER [FK] "nullable"
+      AccusedMasterID INTEGER [FK] "nullable"
+      IsAccused BOOLEAN "nullable"
+      IsComplainantAccused BOOLEAN "nullable"
+    }
+
+    AuditLog {
+      LogID INTEGER [PK]
+      EmployeeID INTEGER [FK] "nullable"
+      officer_name TEXT "nullable"
+      officer_rank TEXT "nullable"
+      action VARCHAR(50) "nullable"
+      query_text TEXT "nullable"
+      result_count INTEGER "nullable"
+      ip_address VARCHAR(50) "nullable"
+      created_at DATETIME "nullable"
+    }
+
+    CaseCategory {
+      CaseCategoryID INTEGER [PK]
+      LookupValue VARCHAR(50)
+    }
+
+    CaseMaster {
+      CaseMasterID INTEGER [PK]
+      CrimeNo VARCHAR(50)
+      CaseNo VARCHAR(20) "nullable"
+      CrimeRegisteredDate DATE
+      PolicePersonID INTEGER [FK] "nullable"
+      PoliceStationID INTEGER [FK] "nullable"
+      CaseCategoryID INTEGER [FK] "nullable"
+      GravityOffenceID INTEGER [FK] "nullable"
+      CrimeMajorHeadID INTEGER [FK] "nullable"
+      CrimeMinorHeadID INTEGER [FK] "nullable"
+      CaseStatusID INTEGER [FK] "nullable"
+      CourtID INTEGER [FK] "nullable"
+      IncidentFromDate DATETIME "nullable"
+      IncidentToDate DATETIME "nullable"
+      InfoReceivedPSDate DATETIME "nullable"
+      latitude NUMERIC(9, 6) "nullable"
+      longitude NUMERIC(9, 6) "nullable"
+      BriefFacts TEXT "nullable"
+      mo_embedding VECTOR(384) "nullable"
+      is_series_crime BOOLEAN "nullable"
+      series_id INTEGER "nullable"
+      created_at DATETIME "nullable"
+    }
+
+    CaseStatusMaster {
+      CaseStatusID INTEGER [PK]
+      CaseStatusName VARCHAR(100)
+    }
+
+    CasteMaster {
+      caste_master_id INTEGER [PK]
+      caste_master_name VARCHAR(100)
+    }
+
+    ChargesheetDetails {
+      CSID INTEGER [PK]
+      CaseMasterID INTEGER [FK] "nullable"
+      csdate DATETIME "nullable"
+      cstype CHAR(1) "nullable"
+      PolicePersonID INTEGER [FK] "nullable"
+    }
+
+    ComplainantDetails {
+      ComplainantID INTEGER [PK]
+      CaseMasterID INTEGER [FK] "nullable"
+      ComplainantName VARCHAR(200)
+      AgeYear INTEGER "nullable"
+      OccupationID INTEGER [FK] "nullable"
+      ReligionID INTEGER [FK] "nullable"
+      CasteID INTEGER [FK] "nullable"
+      GenderID INTEGER "nullable"
+    }
+
+    Court {
+      CourtID INTEGER [PK]
+      CourtName VARCHAR(200)
+      DistrictID INTEGER [FK] "nullable"
+      StateID INTEGER [FK] "nullable"
+      Active BOOLEAN "nullable"
+    }
+
+    CrimeHead {
+      CrimeHeadID INTEGER [PK]
+      CrimeGroupName VARCHAR(200)
+      Active BOOLEAN "nullable"
+    }
+
+    CrimeHeadActSection {
+      CrimeHeadID INTEGER [PK,FK]
+      ActCode VARCHAR(50) [PK,FK]
+      SectionCode VARCHAR(50) [PK]
+    }
+
+    CrimeSubHead {
+      CrimeSubHeadID INTEGER [PK]
+      CrimeHeadID INTEGER [FK] "nullable"
+      CrimeHeadName VARCHAR(200)
+      SeqID INTEGER "nullable"
+      Active BOOLEAN "nullable"
+    }
+
+    Designation {
+      DesignationID INTEGER [PK]
+      DesignationName VARCHAR(100)
+      SortOrder INTEGER "nullable"
+      Active BOOLEAN "nullable"
+    }
+
+    District {
+      DistrictID INTEGER [PK]
+      DistrictName VARCHAR(100)
+      StateID INTEGER [FK] "nullable"
+      Active BOOLEAN "nullable"
+    }
+
+    Employee {
+      EmployeeID INTEGER [PK]
+      DistrictID INTEGER [FK] "nullable"
+      UnitID INTEGER [FK] "nullable"
+      RankID INTEGER [FK] "nullable"
+      DesignationID INTEGER [FK] "nullable"
+      KGID VARCHAR(50) "nullable"
+      FirstName VARCHAR(100)
+      EmployeeDOB DATE "nullable"
+      GenderID INTEGER "nullable"
+      BloodGroupID INTEGER "nullable"
+      PhysicallyChallenged BOOLEAN "nullable"
+      AppointmentDate DATE "nullable"
+      Active BOOLEAN "nullable"
+    }
+
+    Evidence {
+      EvidenceID INTEGER [PK]
+      CaseMasterID INTEGER [FK] "nullable"
+      evidence_type VARCHAR(50) "nullable"
+      file_url TEXT "nullable"
+      file_hash TEXT "nullable"
+      description TEXT "nullable"
+      gps_lat NUMERIC(9, 6) "nullable"
+      gps_lng NUMERIC(9, 6) "nullable"
+      collected_at DATETIME "nullable"
+      uploaded_by INTEGER [FK] "nullable"
+      created_at DATETIME "nullable"
+    }
+
+    GravityOffence {
+      GravityOffenceID INTEGER [PK]
+      LookupValue VARCHAR(100)
+    }
+
+    OccupationMaster {
+      OccupationID INTEGER [PK]
+      OccupationName VARCHAR(100)
+    }
+
+    Rank {
+      RankID INTEGER [PK]
+      RankName VARCHAR(100)
+      Hierarchy INTEGER "nullable"
+      Active BOOLEAN "nullable"
+    }
+
+    RecoveredItems {
+      RecoveryID INTEGER [PK]
+      CaseMasterID INTEGER [FK] "nullable"
+      AccusedMasterID INTEGER [FK] "nullable"
+      item_description TEXT
+      quantity VARCHAR(50) "nullable"
+      estimated_value NUMERIC(12, 2) "nullable"
+      photo_url TEXT "nullable"
+      photo_hash TEXT "nullable"
+      recovery_date DATETIME "nullable"
+      recovery_location TEXT "nullable"
+      recovered_by INTEGER [FK] "nullable"
+      witness_name TEXT "nullable"
+      seizure_memo_ref TEXT "nullable"
+      created_at DATETIME "nullable"
+    }
+
+    ReligionMaster {
+      ReligionID INTEGER [PK]
+      ReligionName VARCHAR(100)
+    }
+
+    Section {
+      SectionCode VARCHAR(50) [PK]
+      ActCode VARCHAR(50) [PK,FK]
+      SectionDescription VARCHAR(500) "nullable"
+      Active BOOLEAN "nullable"
+    }
+
+    State {
+      StateID INTEGER [PK]
+      StateName VARCHAR(100)
+      NationalityID INTEGER "nullable"
+      Active BOOLEAN "nullable"
+    }
+
+    Unit {
+      UnitID INTEGER [PK]
+      UnitName VARCHAR(200)
+      TypeID INTEGER [FK] "nullable"
+      ParentUnit INTEGER [FK] "nullable"
+      StateID INTEGER [FK] "nullable"
+      DistrictID INTEGER [FK] "nullable"
+      latitude NUMERIC(9, 6) "nullable"
+      longitude NUMERIC(9, 6) "nullable"
+      Active BOOLEAN "nullable"
+    }
+
+    UnitType {
+      UnitTypeID INTEGER [PK]
+      UnitTypeName VARCHAR(100)
+      CityDistState VARCHAR(20) "nullable"
+      Hierarchy INTEGER "nullable"
+      Active BOOLEAN "nullable"
+    }
+
+    Users {
+      UserID INTEGER [PK]
+      EmployeeID INTEGER [FK] "nullable"
+      email TEXT
+      role VARCHAR(30)
+      is_active BOOLEAN "nullable"
+      last_login DATETIME "nullable"
+      created_at DATETIME "nullable"
+    }
+
+    Victim {
+      VictimMasterID INTEGER [PK]
+      CaseMasterID INTEGER [FK] "nullable"
+      VictimName VARCHAR(200)
+      AgeYear INTEGER "nullable"
+      GenderID INTEGER "nullable"
+      VictimPolice CHAR(1) "nullable"
+      photo_url TEXT "nullable"
+      photo_hash TEXT "nullable"
+    }
+
+    AuditLog ||--o| Employee : "EmployeeID_EmployeeID"
+    Users ||--o| Employee : "EmployeeID_EmployeeID"
+    CaseMaster ||--o| Court : "CourtID_CourtID"
+    CaseMaster ||--o| Unit : "PoliceStationID_UnitID"
+    CaseMaster ||--o| GravityOffence : "GravityOffenceID_GravityOffenceID"
+    CaseMaster ||--o| CaseCategory : "CaseCategoryID_CaseCategoryID"
+    CaseMaster ||--o| CrimeHead : "CrimeMajorHeadID_CrimeHeadID"
+    CaseMaster ||--o| CaseStatusMaster : "CaseStatusID_CaseStatusID"
+    CaseMaster ||--o| Employee : "PolicePersonID_EmployeeID"
+    CaseMaster ||--o| CrimeSubHead : "CrimeMinorHeadID_CrimeSubHeadID"
+    ComplainantDetails ||--o| ReligionMaster : "ReligionID_ReligionID"
+    ComplainantDetails ||--o| CasteMaster : "CasteID_caste_master_id"
+    ComplainantDetails ||--o| CaseMaster : "CaseMasterID_CaseMasterID"
+    ComplainantDetails ||--o| OccupationMaster : "OccupationID_OccupationID"
+    Victim ||--o| CaseMaster : "CaseMasterID_CaseMasterID"
+    Accused ||--o| CaseMaster : "CaseMasterID_CaseMasterID"
+    ArrestSurrender ||--o| CaseMaster : "CaseMasterID_CaseMasterID"
+    ArrestSurrender ||--o| Court : "CourtID_CourtID"
+    ArrestSurrender ||--o| Employee : "IOID_EmployeeID"
+    ArrestSurrender ||--o| State : "ArrestSurrenderStateId_StateID"
+    ArrestSurrender ||--o| Accused : "AccusedMasterID_AccusedMasterID"
+    ArrestSurrender ||--o| Unit : "PoliceStationID_UnitID"
+    ArrestSurrender ||--o| District : "ArrestSurrenderDistrictId_DistrictID"
+    ActSectionAssociation ||--o| CaseMaster : "CaseMasterID_CaseMasterID"
+    ActSectionAssociation ||--o| Act : "ActID_ActCode"
+    ChargesheetDetails ||--o| CaseMaster : "CaseMasterID_CaseMasterID"
+    ChargesheetDetails ||--o| Employee : "PolicePersonID_EmployeeID"
+    Evidence ||--o| Employee : "uploaded_by_EmployeeID"
+    Evidence ||--o| CaseMaster : "CaseMasterID_CaseMasterID"
+    RecoveredItems ||--o| CaseMaster : "CaseMasterID_CaseMasterID"
+    RecoveredItems ||--o| Employee : "recovered_by_EmployeeID"
+    RecoveredItems ||--o| Accused : "AccusedMasterID_AccusedMasterID"
+    District ||--o| State : "StateID_StateID"
+    Unit ||--o| UnitType : "TypeID_UnitTypeID"
+    Unit ||--o| Unit : "ParentUnit_UnitID"
+    Unit ||--o| District : "DistrictID_DistrictID"
+    Unit ||--o| State : "StateID_StateID"
+    Employee ||--o| Designation : "DesignationID_DesignationID"
+    Employee ||--o| Unit : "UnitID_UnitID"
+    Employee ||--o| District : "DistrictID_DistrictID"
+    Employee ||--o| Rank : "RankID_RankID"
+    Court ||--o| State : "StateID_StateID"
+    Court ||--o| District : "DistrictID_DistrictID"
+    CrimeSubHead ||--o| CrimeHead : "CrimeHeadID_CrimeHeadID"
+    Section ||--o| Act : "ActCode_ActCode"
+    CrimeHeadActSection ||--o| Act : "ActCode_ActCode"
+    CrimeHeadActSection ||--o| CrimeHead : "CrimeHeadID_CrimeHeadID"
+```

@@ -1,0 +1,37 @@
+# =============================================================
+# Saaransh AI — Backend Dependencies
+# Phase 1: Foundation (FastAPI + SQLAlchemy + PostgreSQL)
+# =============================================================
+
+# ---- Web framework ----
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+
+# ---- Data validation ----
+pydantic==2.10.3
+pydantic-settings==2.7.0
+
+# ---- Database ----
+SQLAlchemy==2.0.36
+psycopg2-binary==2.9.10
+asyncpg==0.30.0
+pgvector==0.3.6
+
+# ---- Migrations ----
+alembic==1.14.0
+
+# ---- Utilities ----
+python-dotenv==1.0.1
+
+# ---- Testing ----
+pytest==8.3.4
+
+# =============================================================
+# Phase 5: AI Foundation (provider-independent)
+# =============================================================
+
+# ---- LLM SDK (Gemini only today; others added in later phases) ----
+google-genai==1.0.0
+
+# ---- Resilience ----
+tenacity>=9.0.0,<10.0.0
