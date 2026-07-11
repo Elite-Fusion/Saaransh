@@ -1,0 +1,433 @@
+Our project is **not a normal crime management system**. It is an **AI-powered Crime Intelligence Platform** for the Karnataka Police.
+
+The frontend should feel like software used inside a **Police Control Room**, not a regular website.
+
+---
+
+# Theme
+
+Use:
+
+* White Glassmorphism UI
+* Frosted glass cards
+* Soft shadows
+* Rounded corners (16–20px)
+* Clean minimal interface
+* Premium government dashboard feel
+
+Primary Colors
+
+```
+Background:
+#F8FAFC
+
+Cards:
+rgba(255,255,255,0.7)
+
+Primary:
+#0B5ED7
+
+Success:
+#2E8B57
+
+Warning:
+#F59E0B
+
+Danger:
+#DC2626
+```
+
+---
+
+# Branding
+
+Top Left
+
+```
+[Karnataka State Police Logo]
+
+Saaransh
+
+AI Powered Crime Intelligence System
+```
+
+The Karnataka State Police logo should also appear as a **large watermark** in the center background with around **5–8% opacity**.
+
+---
+
+# User Roles
+
+Only **3 types of users** exist.
+
+## 1. Police Station
+
+Can:
+
+* Register FIR
+* Upload evidence
+* View cases
+* View AI suggestions
+* Search previous cases
+
+Cannot:
+
+* Edit database records directly
+* Manage users
+
+---
+
+## 2. Database Handler
+
+Can:
+
+* Verify imported data
+* Manage master records
+* Update crime categories
+* Resolve duplicates
+* Manage data quality
+
+Cannot:
+
+* Register FIR
+
+---
+
+## 3. Control Room
+
+Highest privilege.
+
+Can:
+
+* Dashboard
+* AI Investigation
+* Crime Analytics
+* Heat Maps
+* Cross District Linking
+* Risk Prediction
+* Reports
+
+---
+
+# Pages
+
+## Dashboard
+
+This is the main screen.
+
+Contains:
+
+* Total FIRs
+* Active Cases
+* Solved Cases
+* High Risk Districts
+* Repeat Offenders
+* Crime Distribution
+* Karnataka Risk Map
+* Recent Alerts
+* AI Predictions
+
+---
+
+## FIR Registration
+
+Multi-step form
+
+```
+Step 1
+
+Police Station
+
+↓
+
+Step 2
+
+Complainant
+
+↓
+
+Step 3
+
+Incident
+
+↓
+
+Step 4
+
+Suspects
+
+↓
+
+Step 5
+
+Evidence
+
+↓
+
+Submit
+```
+
+### Right Side Panel
+
+While entering FIR
+
+AI automatically checks
+
+```
+Similar Cases
+
+Pattern Match
+
+Known Criminal
+
+Same Weapon
+
+Same Location
+
+Same Vehicle
+
+Confidence
+```
+
+This should update in real time.
+
+---
+
+# AI Assistant
+
+This is the hero page.
+
+Officer asks
+
+```
+How many chain snatching cases happened in Mysuru last month?
+```
+
+or
+
+```
+Mysuru alli chain snatching cases eshtu?
+```
+
+or
+
+```
+Accused person Bengaluru inda bandiddana?
+```
+
+The system answers with:
+
+* Natural language response
+* Charts
+* Related cases
+* Evidence
+* Confidence score
+* Supporting records
+
+---
+
+# Cross Case Linking
+
+Most important page.
+
+Graph visualization.
+
+Center
+
+Current FIR
+
+Around it
+
+Connected cases
+
+Across districts
+
+Connection labels:
+
+* Same Modus Operandi
+* Same Weapon
+* Same Vehicle
+* Same Suspect
+* Same Gang
+* Same Mobile Number
+* Same Pattern
+
+This page should wow the judges.
+
+---
+
+# Karnataka Crime Map
+
+Interactive Karnataka district map.
+
+District colors
+
+```
+Green
+
+↓
+
+Yellow
+
+↓
+
+Orange
+
+↓
+
+Red
+```
+
+Hovering a district should show:
+
+```
+District
+
+Total Crimes
+
+Risk Score
+
+Prediction
+
+Top Crime
+
+Repeat Offenders
+```
+
+---
+
+# AI Reasoning Panel
+
+Every AI answer should display
+
+```
+Reasoning
+
+Evidence
+
+Confidence
+
+Supporting Cases
+
+Why AI thinks this
+```
+
+Never show only an answer.
+
+---
+
+# Human Feedback
+
+Each AI answer has
+
+```
+👍 Useful
+
+👎 Not Useful
+```
+
+The officer can provide feedback.
+
+---
+
+# Reports
+
+Download
+
+* PDF
+* Excel
+
+---
+
+# Notifications
+
+Bell icon
+
+Examples
+
+```
+High Risk Alert
+
+Repeat Offender Detected
+
+Similar FIR Found
+
+District Risk Increased
+
+AI Recommendation
+```
+
+---
+
+# Navigation
+
+```
+Dashboard
+
+FIR / Cases
+
+Map Intelligence
+
+AI Assistant
+
+Cross Case Linker
+
+Analytics
+
+Reports
+
+Users
+
+Settings
+```
+
+---
+
+# Animations
+
+Use smooth animations.
+
+* Glass hover effect
+* Card elevation
+* Fade transitions
+* Animated counters
+* Map zoom
+* Graph animations
+
+Nothing flashy—everything should feel professional.
+
+---
+
+# Mobile
+
+Focus on desktop first.
+
+Minimum resolution
+
+```
+1920×1080
+```
+
+Responsive support for tablets is enough.
+
+---
+
+# Goal
+
+When judges see the UI, they should immediately feel:
+
+> "This looks like a modern AI-powered command center for the Karnataka Police, not a college project."
+
+---
+
+## I also recommend one additional feature
+
+Since you're targeting the **KSP Datathon**, add a **"Live Incident Timeline"** panel on the dashboard.
+
+Imagine a vertical timeline on the right:
+
+* 🟢 FIR Registered
+* 🟡 AI found 3 similar cases
+* 🔴 Repeat offender match detected
+* 🔵 Officer assigned
+* 🟣 Investigation updated
+
