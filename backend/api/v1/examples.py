@@ -739,3 +739,128 @@ EXAMPLE_RECENT_EMPTY = {
         },
     },
 }
+
+
+# ---------------------------------------------------------------------
+# Auth — login
+# ---------------------------------------------------------------------
+
+EXAMPLE_AUTH_LOGIN_SUCCESS = {
+    "summary": "200 — login successful",
+    "description": "Returns a JWT access and refresh token pair.",
+    "value": {
+        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+        "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+        "token_type": "bearer",
+    },
+}
+
+EXAMPLE_AUTH_LOGIN_INVALID = {
+    "summary": "401 — invalid credentials",
+    "description": "Email or password is incorrect.",
+    "value": {"detail": "Invalid email or password"},
+}
+
+EXAMPLE_AUTH_LOGIN_DEACTIVATED = {
+    "summary": "401 — account deactivated",
+    "description": "The user account has been deactivated.",
+    "value": {"detail": "Account is deactivated"},
+}
+
+# ---------------------------------------------------------------------
+# Auth — refresh
+# ---------------------------------------------------------------------
+
+EXAMPLE_AUTH_REFRESH_SUCCESS = {
+    "summary": "200 — token refreshed",
+    "description": "Returns a new access and refresh token pair.",
+    "value": {
+        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+        "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+        "token_type": "bearer",
+    },
+}
+
+EXAMPLE_AUTH_REFRESH_INVALID = {
+    "summary": "401 — invalid or expired refresh token",
+    "description": "The refresh token is invalid or has expired.",
+    "value": {"detail": "Invalid token: Signature has expired"},
+}
+
+# ---------------------------------------------------------------------
+# Auth — me
+# ---------------------------------------------------------------------
+
+EXAMPLE_AUTH_ME_SUCCESS = {
+    "summary": "200 — current user profile",
+    "description": "Returns the profile of the authenticated user.",
+    "value": {
+        "UserID": 1,
+        "name": "Rajesh Kumar M",
+        "email": "officer@ksp.gov.in",
+        "role": "control_center_officer",
+        "is_active": True,
+        "last_login": "2026-07-22T10:15:30+00:00",
+    },
+}
+
+EXAMPLE_AUTH_ME_UNAUTHORIZED = {
+    "summary": "401 — missing or invalid token",
+    "description": "No Authorization header or token is invalid.",
+    "value": {"detail": "Missing Authorization header"},
+}
+
+# ---------------------------------------------------------------------
+# Auth — create user (admin)
+# ---------------------------------------------------------------------
+
+EXAMPLE_AUTH_CREATE_USER_SUCCESS = {
+    "summary": "201 — user created",
+    "description": "New user created by a Control Center Officer.",
+    "value": {
+        "UserID": 2,
+        "name": "Officer Kumar",
+        "email": "new@ksp.gov.in",
+        "role": "police_station_officer",
+        "is_active": True,
+        "last_login": None,
+    },
+}
+
+EXAMPLE_AUTH_CREATE_USER_DUPLICATE = {
+    "summary": "409 — email already registered",
+    "description": "A user with this email already exists.",
+    "value": {"detail": "Email already registered"},
+}
+
+EXAMPLE_AUTH_CREATE_USER_FORBIDDEN = {
+    "summary": "403 — control_center_officer role required",
+    "description": "Only Control Center Officers can create new accounts.",
+    "value": {"detail": "Role 'police_station_officer' is not allowed. Required: control_center_officer"},
+}
+
+
+# ---------------------------------------------------------------------
+# Auth — register (first user)
+# ---------------------------------------------------------------------
+
+EXAMPLE_AUTH_REGISTER_SUCCESS = {
+    "summary": "201 — registration submitted",
+    "description": "First Control Center Officer registered successfully.",
+    "value": {
+        "message": "Registration submitted successfully. Please sign in.",
+        "user_id": 1,
+    },
+}
+
+EXAMPLE_AUTH_REGISTER_USERS_EXIST = {
+    "summary": "403 — registration closed",
+    "description": "Users already exist. Only Control Center Officers can create new users.",
+    "value": {"detail": "Registration is closed. Only Control Center Officers can create new users."},
+}
+
+EXAMPLE_AUTH_REGISTER_WRONG_ROLE = {
+    "summary": "403 — first user must be control_center_officer",
+    "description": "The first registered user must be a Control Center Officer.",
+    "value": {"detail": "The first user must be a Control Center Officer."},
+}

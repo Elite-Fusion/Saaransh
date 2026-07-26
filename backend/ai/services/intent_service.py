@@ -68,6 +68,35 @@ _RAW_RESPONSE_CAP = 500
 # would risk misclassifying "show me a similar case" as `case_search`
 # when the user actually wants `similar_cases` — order matters.
 
+_GREETING_RE = re.compile(
+    r"^(hello|hi|hey|good\s*morning|good\s*afternoon|good\s*evening|namaskara|namaste|ನಮಸ್ಕಾರ)\b",
+    re.IGNORECASE,
+)
+_FAREWELL_RE = re.compile(
+    r"^(bye|goodbye|thank\s*you|thanks|good\s*night)\b",
+    re.IGNORECASE,
+)
+_HELP_RE = re.compile(
+    r"\b(who\s*are\s*you|what\s*can\s*you\s*do|help|commands|examples|usage|instructions)\b",
+    re.IGNORECASE,
+)
+_SUSPECTS_RE = re.compile(
+    r"\b(suspects?|accused|perpetrator|who\s+did\s+it|suspect\s+name|suspect\s+details)\b",
+    re.IGNORECASE,
+)
+_EVIDENCE_RE = re.compile(
+    r"\b(evidence|clues|seized|stolen\s+property|weapon|vehicle|proof)\b",
+    re.IGNORECASE,
+)
+_TIMELINE_RE = re.compile(
+    r"\b(timeline|sequence\s+of\s+events|chronology|history)\b",
+    re.IGNORECASE,
+)
+_IO_RE = re.compile(
+    r"\b(who\s+is\s+io|investigating\s+officer|who\s+handled|officer\s+assigned|assigned\s+officer)\b",
+    re.IGNORECASE,
+)
+
 _CASE_ID_RE = re.compile(r"\bcase\s*(?:id\s*[:=]?\s*)?(\d+)\b", re.IGNORECASE)
 _FIR_RE = re.compile(r"\bFIR\s*(?:number\s*[:=]?\s*)?([A-Z0-9]+)\b", re.IGNORECASE)
 
@@ -90,19 +119,44 @@ _SIMILAR_RE = re.compile(
 _DASHBOARD_RE = re.compile(
     r"\b(how\s+many|trend|trends|distribution|breakdown|"
     r"summary\s+of\s+(?:cases|the\s+database)|overall|"
-    r"monthly|quarterly|annual\s+stats?|statistics)\b",
+    r"monthly|quarterly|annual\s+stats?|statistics|"
+    r"count|total|aggregate|tally|how\s+much|"
+    r"keTlu|entha|eshtu|ಎಷ್ಟು)\b",
     re.IGNORECASE,
 )
 _CASE_LIST_RE = re.compile(
-    r"\b(list|show|find|fetch|get|search\s+for)\s+"
-    r"(?:all\s+)?(?:the\s+)?(?:cases?|firs?|incidents?)\b",
+    r"\b("
+    r"list|show|find|fetch|get|retrieve|search\s+for|display|give\s+me"
+    r"|eshtu|ettu|ಪ್ರಕರಣ|ಕಳ್ಳತನ|ಚೈನ್|ವರದಿ|ತನಿಖೆ"
+    r"|cases?\s+(?:in|for|of|from|between|last|this|today|yesterday|registered)"
+    r"|\w+\s+cases?"
+    r"|(?:last|this)\s+\d+\s+days?"
+    r"|(?:last|this)\s+(?:week|month|year)"
+    r"|today|yesterday"
+    r")\b",
+    re.IGNORECASE,
+)
+#: Matches a verb paired with a specific case id / FIR reference. We
+#: check this BEFORE the generic case-list pattern so "Show FIR 1044"
+#: classifies as :attr:`Intent.EXPLAIN_CASE` rather than
+#: :attr:`Intent.CASE_SEARCH`. The verb set is the same as
+#: :data:`_CASE_LIST_RE`'s first group — we keep them in sync by
+#: hand.
+_SHOW_SPECIFIC_RE = re.compile(
+    r"\b(show|give\s+me|display|fetch|get|retrieve|find)\s+"
+    r"(?:me\s+)?"
+    r"(?:the\s+)?"
+    r"(?:case|FIR)\s*"
+    r"(?:id\s*[:=]?\s*|number\s*[:=]?\s*|no\.?\s*|no\s*[:=]?\s*)?"
+    r"[A-Z0-9][A-Z0-9\-]*\b",
     re.IGNORECASE,
 )
 
 #: Minimum length of a question that the fallback will try. Below
 #: this we treat the input as too short to be a real investigation
 #: question and return UNKNOWN.
-_MIN_QUESTION_LEN = 8
+_MIN_QUESTION_LEN = 3
+
 
 
 class IntentService:
@@ -162,6 +216,25 @@ class IntentService:
                 question,
                 reason="Question is too short to classify.",
             )
+
+        # Check conversational regex matchers first to avoid unnecessary LLM calls
+        conversational_intent, conv_reason = self._classify_with_regex(question)
+        if conversational_intent in (
+            Intent.GREETING,
+            Intent.FAREWELL,
+            Intent.HELP,
+            Intent.CASE_SUSPECTS,
+            Intent.CASE_EVIDENCE,
+            Intent.CASE_TIMELINE,
+            Intent.CASE_IO,
+        ):
+            return IntentClassification(
+                intent=conversational_intent,
+                confidence=1.0,
+                reasoning=conv_reason,
+                raw_response="regex_conversational_match",
+            )
+
 
         llm_result: IntentClassification | None = None
         try:
@@ -240,8 +313,12 @@ class IntentService:
             )
 
         try:
+            intent_str = str(parsed.get("intent", "")).strip()
+            if "|" in intent_str:
+                intent_str = intent_str.split("|")[0].strip()
+            intent_enum = Intent(intent_str) if intent_str in [i.value for i in Intent] else Intent.UNKNOWN
             return IntentClassification(
-                intent=Intent(parsed["intent"]),
+                intent=intent_enum,
                 confidence=float(parsed.get("confidence", 0.5)),
                 reasoning=str(parsed.get("reasoning", "")).strip() or "no reasoning",
                 raw_response=raw[:_RAW_RESPONSE_CAP],
@@ -258,6 +335,7 @@ class IntentService:
                 reasoning=f"LLM reply did not match the schema: {exc}",
                 raw_response=raw[:_RAW_RESPONSE_CAP],
             )
+
 
     @staticmethod
     def _parse_llm_reply(text: str) -> dict[str, Any] | None:
@@ -315,7 +393,23 @@ class IntentService:
         if not question:
             return Intent.UNKNOWN, "empty question"
 
+        if _GREETING_RE.search(question):
+            return Intent.GREETING, "Question is a greeting phrase."
+        if _FAREWELL_RE.search(question):
+            return Intent.FAREWELL, "Question is a farewell phrase."
+        if _HELP_RE.search(question):
+            return Intent.HELP, "Question asks for capabilities or help."
+        if _SUSPECTS_RE.search(question):
+            return Intent.CASE_SUSPECTS, "Question asks for case suspects or accused details."
+        if _EVIDENCE_RE.search(question):
+            return Intent.CASE_EVIDENCE, "Question asks for case evidence or seized property."
+        if _TIMELINE_RE.search(question):
+            return Intent.CASE_TIMELINE, "Question asks for case timeline or event history."
+        if _IO_RE.search(question):
+            return Intent.CASE_IO, "Question asks for investigating officer details."
+
         if _INVESTIGATE_RE.search(question):
+
             return (
                 Intent.INVESTIGATION_SUMMARY,
                 "Question uses an investigation trigger phrase.",
@@ -336,6 +430,18 @@ class IntentService:
             return (
                 Intent.DASHBOARD_ANALYTICS,
                 "Question uses a dashboard / analytics trigger phrase.",
+            )
+        if _SHOW_SPECIFIC_RE.search(question) and (
+            _CASE_ID_RE.search(question) or _FIR_RE.search(question)
+        ):
+            # "Show FIR 1044..." / "give me case 12" — a verb paired
+            # with a specific reference means the user wants details on
+            # that case, not a list. Classify as EXPLAIN_CASE so the
+            # orchestrator can hit CaseService.get_case_detail instead
+            # of running an arbitrary list query.
+            return (
+                Intent.EXPLAIN_CASE,
+                "Question pairs an action verb with a specific case id / FIR.",
             )
         if _CASE_LIST_RE.search(question):
             return (

@@ -80,18 +80,16 @@ When the user mentions any of these, translate to a `WHERE` clause:
 
 | Natural language | SQL fragment |
 |---|---|
-| "in <District>" | join `Unit` on `PoliceStationID`, `where Unit.DistrictID = :district_id` |
-| "at <Police Station>" | `where PoliceStationID = :unit_id` |
-| "of type <Crime Head>" | `where CrimeMajorHeadID = :crime_head_id` |
-| "sub-type <Crime Sub Head>" | `where CrimeMinorHeadID = :crime_sub_head_id` |
-| "status <Open / Closed / ...>" | `where CaseStatusID = :case_status_id` |
-| "registered between X and Y" | `where CrimeRegisteredDate between :date_from and :date_to` |
-| "FIR number <CrimeNo>" | `where CrimeNo = :fir_number` (exact match) |
+| "in <District>" | `JOIN Unit AS u ON cm.PoliceStationID = u.UnitID JOIN District AS d ON u.DistrictID = d.DistrictID WHERE ILIKE(d.DistrictName, :district_name)` |
+| "at <Police Station>" | `JOIN Unit AS u ON cm.PoliceStationID = u.UnitID WHERE ILIKE(u.UnitName, :unit_name)` |
+| "of type <Crime Head>" | `JOIN CrimeHead AS ch ON cm.CrimeMajorHeadID = ch.CrimeHeadID WHERE ILIKE(ch.CrimeGroupName, :crime_group_name)` (Note: `CrimeMajorHeadID` is an integer FK; do NOT compare `CrimeMajorHeadID` directly to a string name) |
+| "sub-type <Crime Sub Head>" | `JOIN CrimeSubHead AS csh ON cm.CrimeMinorHeadID = csh.CrimeSubHeadID WHERE ILIKE(csh.CrimeHeadName, :subhead_name)` |
+| "status <Open / Closed / ...>" | `JOIN CaseStatusMaster AS csm ON cm.CaseStatusID = csm.CaseStatusID WHERE ILIKE(csm.CaseStatusName, :status_name)` (Note: `CaseStatusID` is an integer FK; do NOT compare `CaseStatusID` directly to string `'Open'`) |
+| "registered between X and Y" | `WHERE cm.CrimeRegisteredDate BETWEEN :date_from AND :date_to` |
+| "FIR number <CrimeNo>" | `WHERE cm.CrimeNo = :fir_number` (exact match) |
 
-When the user gives a name (not an id) and a name-to-id lookup is
-trivial, prefer the id. When in doubt, return the name as a
-parameter and let the service do the lookup — it is already
-optimised for that path.
+IMPORTANT: Foreign key columns like `CrimeMajorHeadID`, `CaseStatusID`, `PoliceStationID`, `DistrictID` are INTEGERS. Never pass a string like `'chain snatching'` or `'Open'` as a value for an integer column. Always `JOIN` the corresponding lookup table (`CrimeHead`, `CaseStatusMaster`, `District`, `Unit`) when filtering by text names.
+
 
 ---
 

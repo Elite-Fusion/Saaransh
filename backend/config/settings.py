@@ -7,7 +7,7 @@ at startup. Fail fast if anything required is missing or malformed.
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -26,6 +26,18 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     environment: Literal["development", "staging", "production"] = "development"
     debug: bool = True
+
+    @field_validator("debug", mode="before")
+    @classmethod
+    def _coerce_debug(cls, v: object) -> bool:
+        """Accept 'true'/'false'/'1'/'0' and ignore non-boolean system vars."""
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            if v.strip().lower() in ("true", "1", "yes"):
+                return True
+            return False
+        return bool(v)
     api_v1_prefix: str = "/api/v1"
 
     # ---- Server ----
@@ -50,6 +62,18 @@ class Settings(BaseSettings):
         "http://localhost:3000",
     ]
 
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def _parse_cors_origins(cls, v: object) -> list[str]:
+        if isinstance(v, str):
+            v = v.strip()
+            if v.startswith("[") and v.endswith("]"):
+                import json
+                return json.loads(v)
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
+
+
     # ---- Logging ----
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     log_format: Literal["json", "text"] = "text"
@@ -59,26 +83,16 @@ class Settings(BaseSettings):
     # OpenAI, Groq, and OpenRouter plug into the same interface in
     # later phases. Switching providers = changing ``ai_provider``
     # and setting the matching ``<PROVIDER>_API_KEY``.
-    ai_provider: Literal["gemini"] = Field(
+    ai_provider: Literal["gemini", "nvidia"] = Field(
         default="gemini",
         description=(
-            "Which LLM provider to use. The Phase 5 implementation "
-            "supports only 'gemini'; other values raise "
-            "UnsupportedProviderError at startup."
+            "Which LLM provider to use. Supported: 'gemini', 'nvidia'."
         ),
     )
-    gemini_api_key: str = Field(
-        default="",
-        description=(
-            "Google AI Studio API key. Empty values cause the "
-            "Settings validator to fail at startup when "
-            "ai_provider == 'gemini'."
-        ),
-    )
-    gemini_model: str = Field(
-        default="gemini-2.0-flash",
-        description="Gemini model name. Free-tier friendly default.",
-    )
+    gemini_api_key: str = Field(default="", description="Google AI Studio API key.")
+    gemini_model: str = Field(default="gemini-2.0-flash", description="Gemini model name.")
+    nvidia_api_key: str = Field(default="", description="NVIDIA NIM API key (nvapi-...).")
+    nvidia_model: str = Field(default="meta/llama-3.1-8b-instruct", description="NVIDIA NIM model name.")
     ai_request_timeout_seconds: float = Field(
         default=30.0,
         gt=0.0,
@@ -100,6 +114,28 @@ class Settings(BaseSettings):
         ),
     )
 
+    # ---- JWT / Auth (Phase 10) ----
+    jwt_secret_key: str = Field(
+        default="change-me-in-production-use-openssl-rand-hex-32",
+        description="HMAC secret for signing JWTs. Use a long random string.",
+    )
+    jwt_algorithm: str = Field(
+        default="HS256",
+        description="JWT signing algorithm.",
+    )
+    jwt_access_token_expire_minutes: int = Field(
+        default=60,
+        ge=5,
+        le=1440,
+        description="Access token lifetime in minutes.",
+    )
+    jwt_refresh_token_expire_days: int = Field(
+        default=7,
+        ge=1,
+        le=90,
+        description="Refresh token lifetime in days.",
+    )
+
     # ---- Validators ----
     @model_validator(mode="after")
     def _validate_ai_credentials(self) -> "Settings":
@@ -119,6 +155,11 @@ class Settings(BaseSettings):
             raise ValueError(
                 "GEMINI_API_KEY is empty. Set the environment variable "
                 "before starting the backend (see backend/.env.example)."
+            )
+        if provider == "nvidia" and not (self.nvidia_api_key or "").strip():
+            raise ValueError(
+                "NVIDIA_API_KEY is empty. Set the environment variable "
+                "before starting the backend."
             )
         return self
 

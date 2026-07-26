@@ -1,20 +1,8 @@
 """
 SQLAlchemy ORM models — Case Core group.
 
-The heart of the database: CaseMaster and everything attached to it.
-This is the FIR and its universe of complainant, victim, accused, charges,
-arrest, chargesheet, evidence, and recovered items.
-
-Tables:
-  - CaseMaster
-  - ComplainantDetails
-  - Victim
-  - Accused
-  - ArrestSurrender
-  - ActSectionAssociation
-  - ChargesheetDetails
-  - Evidence
-  - RecoveredItems
+Column names match the Supabase schema exactly (all lowercase).
+Python attribute names are unchanged for backward compatibility.
 """
 from __future__ import annotations
 
@@ -51,153 +39,66 @@ if TYPE_CHECKING:
 
 
 class CaseMaster(Base):
-    """An FIR (First Information Report) — the central entity."""
+    __tablename__ = "casemaster"
 
-    __tablename__ = "CaseMaster"
+    CaseMasterID: Mapped[int] = mapped_column("casemasterid", Integer, primary_key=True, autoincrement=True)
+    CrimeNo: Mapped[str] = mapped_column("crimeno", String(50), unique=True, nullable=False)
+    CaseNo: Mapped[str | None] = mapped_column("caseno", String(20), nullable=True)
+    CrimeRegisteredDate: Mapped[date] = mapped_column("crimeregistereddate", Date, nullable=False)
+    PolicePersonID: Mapped[int | None] = mapped_column("policepersonid", Integer, ForeignKey("employee.employeeid"), nullable=True)
+    PoliceStationID: Mapped[int | None] = mapped_column("policestationid", Integer, ForeignKey("unit.unitid"), nullable=True)
+    CaseCategoryID: Mapped[int | None] = mapped_column("casecategoryid", Integer, ForeignKey("casecategory.casecategoryid"), nullable=True)
+    GravityOffenceID: Mapped[int | None] = mapped_column("gravityoffenceid", Integer, ForeignKey("gravityoffence.gravityoffenceid"), nullable=True)
+    CrimeMajorHeadID: Mapped[int | None] = mapped_column("crimemajorheadid", Integer, ForeignKey("crimehead.crimeheadid"), nullable=True)
+    CrimeMinorHeadID: Mapped[int | None] = mapped_column("crimeminorheadid", Integer, ForeignKey("crimesubhead.crimesubheadid"), nullable=True)
+    CaseStatusID: Mapped[int | None] = mapped_column("casestatusid", Integer, ForeignKey("casestatusmaster.casestatusid"), nullable=True)
+    CourtID: Mapped[int | None] = mapped_column("courtid", Integer, ForeignKey("court.courtid"), nullable=True)
+    IncidentFromDate: Mapped[datetime | None] = mapped_column("incidentfromdate", DateTime, nullable=True)
+    IncidentToDate: Mapped[datetime | None] = mapped_column("incidenttodate", DateTime, nullable=True)
+    InfoReceivedPSDate: Mapped[datetime | None] = mapped_column("inforeceivedpsdate", DateTime, nullable=True)
+    latitude: Mapped[float | None] = mapped_column("latitude", Numeric(9, 6), nullable=True)
+    longitude: Mapped[float | None] = mapped_column("longitude", Numeric(9, 6), nullable=True)
+    BriefFacts: Mapped[str | None] = mapped_column("brieffacts", Text, nullable=True)
+    mo_embedding: Mapped[list[float] | None] = mapped_column("mo_embedding", Vector(384), nullable=True)
+    is_series_crime: Mapped[bool | None] = mapped_column("is_series_crime", Boolean, default=False, nullable=True)
+    series_id: Mapped[int | None] = mapped_column("series_id", Integer, nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column("created_at", DateTime, default=None, nullable=True)
 
-    CaseMasterID: Mapped[int] = mapped_column(
-        Integer, primary_key=True, autoincrement=True
-    )
-    CrimeNo: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
-    CaseNo: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    CrimeRegisteredDate: Mapped[date] = mapped_column(Date, nullable=False)
-    PolicePersonID: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("Employee.EmployeeID"), nullable=True
-    )
-    PoliceStationID: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("Unit.UnitID"), nullable=True
-    )
-    CaseCategoryID: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("CaseCategory.CaseCategoryID"), nullable=True
-    )
-    GravityOffenceID: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("GravityOffence.GravityOffenceID"), nullable=True
-    )
-    CrimeMajorHeadID: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("CrimeHead.CrimeHeadID"), nullable=True
-    )
-    CrimeMinorHeadID: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("CrimeSubHead.CrimeSubHeadID"), nullable=True
-    )
-    CaseStatusID: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("CaseStatusMaster.CaseStatusID"), nullable=True
-    )
-    CourtID: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("Court.CourtID"), nullable=True
-    )
-    IncidentFromDate: Mapped[datetime | None] = mapped_column(
-        DateTime, nullable=True
-    )
-    IncidentToDate: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    InfoReceivedPSDate: Mapped[datetime | None] = mapped_column(
-        DateTime, nullable=True
-    )
-    latitude: Mapped[float | None] = mapped_column(Numeric(9, 6), nullable=True)
-    longitude: Mapped[float | None] = mapped_column(Numeric(9, 6), nullable=True)
-    BriefFacts: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Relationships
+    police_station: Mapped["Unit | None"] = relationship("Unit", foreign_keys=[PoliceStationID])
+    investigating_officer: Mapped["Employee | None"] = relationship("Employee", foreign_keys=[PolicePersonID])
+    court: Mapped["Court | None"] = relationship("Court", foreign_keys=[CourtID])
+    case_category: Mapped["CaseCategory | None"] = relationship("CaseCategory", foreign_keys=[CaseCategoryID])
+    gravity: Mapped["GravityOffence | None"] = relationship("GravityOffence", foreign_keys=[GravityOffenceID])
+    crime_major_head: Mapped["CrimeHead | None"] = relationship("CrimeHead", foreign_keys=[CrimeMajorHeadID])
+    crime_minor_head: Mapped["CrimeSubHead | None"] = relationship("CrimeSubHead", foreign_keys=[CrimeMinorHeadID])
+    case_status: Mapped["CaseStatusMaster | None"] = relationship("CaseStatusMaster", foreign_keys=[CaseStatusID])
 
-    # AI extensions -----------------------------------------------------------
-    mo_embedding: Mapped[list[float] | None] = mapped_column(
-        Vector(384), nullable=True
-    )
-    is_series_crime: Mapped[bool | None] = mapped_column(
-        Boolean, default=False, nullable=True
-    )
-    series_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    created_at: Mapped[datetime | None] = mapped_column(
-        DateTime, default=None, nullable=True
-    )
-
-    # Relationships ----------------------------------------------------------
-    police_station: Mapped["Unit | None"] = relationship(  # noqa: F821
-        "Unit", foreign_keys=[PoliceStationID]
-    )
-    investigating_officer: Mapped["Employee | None"] = relationship(  # noqa: F821
-        "Employee", foreign_keys=[PolicePersonID]
-    )
-    court: Mapped["Court | None"] = relationship(  # noqa: F821
-        "Court", foreign_keys=[CourtID]
-    )
-    case_category: Mapped["CaseCategory | None"] = relationship(  # noqa: F821
-        "CaseCategory", foreign_keys=[CaseCategoryID]
-    )
-    gravity: Mapped["GravityOffence | None"] = relationship(  # noqa: F821
-        "GravityOffence", foreign_keys=[GravityOffenceID]
-    )
-    crime_major_head: Mapped["CrimeHead | None"] = relationship(  # noqa: F821
-        "CrimeHead", foreign_keys=[CrimeMajorHeadID]
-    )
-    crime_minor_head: Mapped["CrimeSubHead | None"] = relationship(  # noqa: F821
-        "CrimeSubHead", foreign_keys=[CrimeMinorHeadID]
-    )
-    case_status: Mapped["CaseStatusMaster | None"] = relationship(  # noqa: F821
-        "CaseStatusMaster", foreign_keys=[CaseStatusID]
-    )
-
-    # case-centric children
-    complainants: Mapped[list["ComplainantDetails"]] = relationship(
-        back_populates="case",
-        cascade="save-update, merge",
-    )
-    victims: Mapped[list["Victim"]] = relationship(
-        back_populates="case",
-        cascade="save-update, merge",
-    )
-    accused: Mapped[list["Accused"]] = relationship(
-        back_populates="case",
-        cascade="save-update, merge",
-    )
-    arrests: Mapped[list["ArrestSurrender"]] = relationship(
-        back_populates="case",
-        cascade="save-update, merge",
-    )
-    act_sections: Mapped[list["ActSectionAssociation"]] = relationship(
-        back_populates="case",
-        cascade="save-update, merge",
-    )
-    chargesheet: Mapped["ChargesheetDetails | None"] = relationship(
-        back_populates="case",
-        cascade="save-update, merge",
-        uselist=False,
-    )
-    evidence: Mapped[list["Evidence"]] = relationship(
-        back_populates="case",
-        cascade="save-update, merge",
-    )
-    recovered_items: Mapped[list["RecoveredItems"]] = relationship(
-        back_populates="case",
-        cascade="save-update, merge",
-    )
+    complainants: Mapped[list["ComplainantDetails"]] = relationship(back_populates="case", cascade="save-update, merge")
+    victims: Mapped[list["Victim"]] = relationship(back_populates="case", cascade="save-update, merge")
+    accused: Mapped[list["Accused"]] = relationship(back_populates="case", cascade="save-update, merge")
+    arrests: Mapped[list["ArrestSurrender"]] = relationship(back_populates="case", cascade="save-update, merge")
+    act_sections: Mapped[list["ActSectionAssociation"]] = relationship(back_populates="case", cascade="save-update, merge")
+    chargesheet: Mapped["ChargesheetDetails | None"] = relationship(back_populates="case", cascade="save-update, merge", uselist=False)
+    evidence: Mapped[list["Evidence"]] = relationship(back_populates="case", cascade="save-update, merge")
+    recovered_items: Mapped[list["RecoveredItems"]] = relationship(back_populates="case", cascade="save-update, merge")
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<CaseMaster {self.CaseMasterID} {self.CrimeNo!r}>"
 
 
 class ComplainantDetails(Base):
-    """The person who reported the FIR."""
+    __tablename__ = "complainantdetails"
 
-    __tablename__ = "ComplainantDetails"
+    ComplainantID: Mapped[int] = mapped_column("complainantid", Integer, primary_key=True, autoincrement=True)
+    CaseMasterID: Mapped[int | None] = mapped_column("casemasterid", Integer, ForeignKey("casemaster.casemasterid"), nullable=True)
+    ComplainantName: Mapped[str] = mapped_column("complainantname", String(200), nullable=False)
+    AgeYear: Mapped[int | None] = mapped_column("ageyear", Integer, nullable=True)
+    OccupationID: Mapped[int | None] = mapped_column("occupationid", Integer, ForeignKey("occupationmaster.occupationid"), nullable=True)
+    ReligionID: Mapped[int | None] = mapped_column("religionid", Integer, ForeignKey("religionmaster.religionid"), nullable=True)
+    CasteID: Mapped[int | None] = mapped_column("casteid", Integer, ForeignKey("castemaster.caste_master_id"), nullable=True)
+    GenderID: Mapped[int | None] = mapped_column("genderid", Integer, nullable=True)
 
-    ComplainantID: Mapped[int] = mapped_column(
-        Integer, primary_key=True, autoincrement=True
-    )
-    CaseMasterID: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("CaseMaster.CaseMasterID"), nullable=True
-    )
-    ComplainantName: Mapped[str] = mapped_column(String(200), nullable=False)
-    AgeYear: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    OccupationID: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("OccupationMaster.OccupationID"), nullable=True
-    )
-    ReligionID: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("ReligionMaster.ReligionID"), nullable=True
-    )
-    CasteID: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("CasteMaster.caste_master_id"), nullable=True
-    )
-    GenderID: Mapped[int | None] = mapped_column(Integer, nullable=True)
-
-    # Relationships ----------------------------------------------------------
     case: Mapped["CaseMaster | None"] = relationship(back_populates="complainants")
 
     def __repr__(self) -> str:  # pragma: no cover
@@ -205,24 +106,17 @@ class ComplainantDetails(Base):
 
 
 class Victim(Base):
-    """A victim of the case."""
+    __tablename__ = "victim"
 
-    __tablename__ = "Victim"
+    VictimMasterID: Mapped[int] = mapped_column("victimmasterid", Integer, primary_key=True, autoincrement=True)
+    CaseMasterID: Mapped[int | None] = mapped_column("casemasterid", Integer, ForeignKey("casemaster.casemasterid"), nullable=True)
+    VictimName: Mapped[str] = mapped_column("victimname", String(200), nullable=False)
+    AgeYear: Mapped[int | None] = mapped_column("ageyear", Integer, nullable=True)
+    GenderID: Mapped[int | None] = mapped_column("genderid", Integer, nullable=True)
+    VictimPolice: Mapped[str | None] = mapped_column("victimpolice", String(1), default="0")
+    photo_url: Mapped[str | None] = mapped_column("photo_url", Text, nullable=True)
+    photo_hash: Mapped[str | None] = mapped_column("photo_hash", Text, nullable=True)
 
-    VictimMasterID: Mapped[int] = mapped_column(
-        Integer, primary_key=True, autoincrement=True
-    )
-    CaseMasterID: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("CaseMaster.CaseMasterID"), nullable=True
-    )
-    VictimName: Mapped[str] = mapped_column(String(200), nullable=False)
-    AgeYear: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    GenderID: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    VictimPolice: Mapped[str | None] = mapped_column(CHAR(1), default="0")
-    photo_url: Mapped[str | None] = mapped_column(Text, nullable=True)
-    photo_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
-
-    # Relationships ----------------------------------------------------------
     case: Mapped["CaseMaster | None"] = relationship(back_populates="victims")
 
     def __repr__(self) -> str:  # pragma: no cover
@@ -230,167 +124,98 @@ class Victim(Base):
 
 
 class Accused(Base):
-    """A person accused of the crime."""
+    __tablename__ = "accused"
 
-    __tablename__ = "Accused"
+    AccusedMasterID: Mapped[int] = mapped_column("accusedmasterid", Integer, primary_key=True, autoincrement=True)
+    CaseMasterID: Mapped[int | None] = mapped_column("casemasterid", Integer, ForeignKey("casemaster.casemasterid"), nullable=True)
+    AccusedName: Mapped[str] = mapped_column("accusedname", String(200), nullable=False)
+    AgeYear: Mapped[int | None] = mapped_column("ageyear", Integer, nullable=True)
+    GenderID: Mapped[int | None] = mapped_column("genderid", Integer, nullable=True)
+    PersonID: Mapped[str | None] = mapped_column("personid", String(10), nullable=True)
+    photo_url: Mapped[str | None] = mapped_column("photo_url", Text, nullable=True)
+    photo_hash: Mapped[str | None] = mapped_column("photo_hash", Text, nullable=True)
+    address: Mapped[str | None] = mapped_column("address", Text, nullable=True)
+    is_known_criminal: Mapped[bool | None] = mapped_column("is_known_criminal", Boolean, default=False, nullable=True)
+    criminal_history: Mapped[str | None] = mapped_column("criminal_history", Text, nullable=True)
 
-    AccusedMasterID: Mapped[int] = mapped_column(
-        Integer, primary_key=True, autoincrement=True
-    )
-    CaseMasterID: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("CaseMaster.CaseMasterID"), nullable=True
-    )
-    AccusedName: Mapped[str] = mapped_column(String(200), nullable=False)
-    AgeYear: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    GenderID: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    PersonID: Mapped[str | None] = mapped_column(String(10), nullable=True)
-    photo_url: Mapped[str | None] = mapped_column(Text, nullable=True)
-    photo_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
-    address: Mapped[str | None] = mapped_column(Text, nullable=True)
-    is_known_criminal: Mapped[bool | None] = mapped_column(
-        Boolean, default=False, nullable=True
-    )
-    criminal_history: Mapped[str | None] = mapped_column(Text, nullable=True)
-
-    # Relationships ----------------------------------------------------------
     case: Mapped["CaseMaster | None"] = relationship(back_populates="accused")
-    arrests: Mapped[list["ArrestSurrender"]] = relationship(
-        back_populates="accused",
-        cascade="save-update, merge",
-    )
-    recovered_items: Mapped[list["RecoveredItems"]] = relationship(
-        back_populates="accused",
-        cascade="save-update, merge",
-    )
+    arrests: Mapped[list["ArrestSurrender"]] = relationship(back_populates="accused", cascade="save-update, merge")
+    recovered_items: Mapped[list["RecoveredItems"]] = relationship(back_populates="accused", cascade="save-update, merge")
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<Accused {self.AccusedMasterID} {self.AccusedName!r}>"
 
 
 class ArrestSurrender(Base):
-    """An arrest or surrender event tied to a case and an accused."""
+    __tablename__ = "arrestsurrender"
 
-    __tablename__ = "ArrestSurrender"
+    ArrestSurrenderID: Mapped[int] = mapped_column("arrestsurrenderid", Integer, primary_key=True, autoincrement=True)
+    CaseMasterID: Mapped[int | None] = mapped_column("casemasterid", Integer, ForeignKey("casemaster.casemasterid"), nullable=True)
+    ArrestSurrenderTypeID: Mapped[int | None] = mapped_column("arrestsurrendertypeid", Integer, nullable=True)
+    ArrestSurrenderDate: Mapped[date | None] = mapped_column("arrestsurrenderdate", Date, nullable=True)
+    ArrestSurrenderStateId: Mapped[int | None] = mapped_column("arrestsurrenderstateid", Integer, ForeignKey("state.stateid"), nullable=True)
+    ArrestSurrenderDistrictId: Mapped[int | None] = mapped_column("arrestsurrenderdistrictid", Integer, ForeignKey("district.districtid"), nullable=True)
+    PoliceStationID: Mapped[int | None] = mapped_column("policestationid", Integer, ForeignKey("unit.unitid"), nullable=True)
+    IOID: Mapped[int | None] = mapped_column("ioid", Integer, ForeignKey("employee.employeeid"), nullable=True)
+    CourtID: Mapped[int | None] = mapped_column("courtid", Integer, ForeignKey("court.courtid"), nullable=True)
+    AccusedMasterID: Mapped[int | None] = mapped_column("accusedmasterid", Integer, ForeignKey("accused.accusedmasterid"), nullable=True)
+    IsAccused: Mapped[bool | None] = mapped_column("isaccused", Boolean, default=True)
+    IsComplainantAccused: Mapped[bool | None] = mapped_column("iscomplainantaccused", Boolean, default=False)
 
-    ArrestSurrenderID: Mapped[int] = mapped_column(
-        Integer, primary_key=True, autoincrement=True
-    )
-    CaseMasterID: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("CaseMaster.CaseMasterID"), nullable=True
-    )
-    ArrestSurrenderTypeID: Mapped[int | None] = mapped_column(
-        Integer, nullable=True
-    )
-    ArrestSurrenderDate: Mapped[date | None] = mapped_column(Date, nullable=True)
-    ArrestSurrenderStateId: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("State.StateID"), nullable=True
-    )
-    ArrestSurrenderDistrictId: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("District.DistrictID"), nullable=True
-    )
-    PoliceStationID: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("Unit.UnitID"), nullable=True
-    )
-    IOID: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("Employee.EmployeeID"), nullable=True
-    )
-    CourtID: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("Court.CourtID"), nullable=True
-    )
-    AccusedMasterID: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("Accused.AccusedMasterID"), nullable=True
-    )
-    IsAccused: Mapped[bool | None] = mapped_column(Boolean, default=True)
-    IsComplainantAccused: Mapped[bool | None] = mapped_column(
-        Boolean, default=False
-    )
-
-    # Relationships ----------------------------------------------------------
     case: Mapped["CaseMaster | None"] = relationship(back_populates="arrests")
     accused: Mapped["Accused | None"] = relationship(back_populates="arrests")
 
     def __repr__(self) -> str:  # pragma: no cover
-        return (
-            f"<ArrestSurrender {self.ArrestSurrenderID} "
-            f"accused={self.AccusedMasterID}>"
-        )
+        return f"<ArrestSurrender {self.ArrestSurrenderID} accused={self.AccusedMasterID}>"
 
 
 class ActSectionAssociation(Base):
-    """Which Act+Section(s) are charged on a case. M:N bridge with ordering."""
+    __tablename__ = "actsectionassociation"
 
-    __tablename__ = "ActSectionAssociation"
+    CaseMasterID: Mapped[int] = mapped_column("casemasterid", Integer, ForeignKey("casemaster.casemasterid"), primary_key=True)
+    ActID: Mapped[str] = mapped_column("actid", String(50), ForeignKey("act.actcode"), primary_key=True)
+    SectionID: Mapped[str] = mapped_column("sectionid", String(50), primary_key=True)
+    ActOrderID: Mapped[int | None] = mapped_column("actorderid", Integer, nullable=True)
+    SectionOrderID: Mapped[int | None] = mapped_column("sectionorderid", Integer, nullable=True)
 
-    CaseMasterID: Mapped[int] = mapped_column(
-        Integer, ForeignKey("CaseMaster.CaseMasterID"), primary_key=True
-    )
-    ActID: Mapped[str] = mapped_column(
-        String(50), ForeignKey("Act.ActCode"), primary_key=True
-    )
-    SectionID: Mapped[str] = mapped_column(String(50), primary_key=True)
-    ActOrderID: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    SectionOrderID: Mapped[int | None] = mapped_column(Integer, nullable=True)
-
-    # Relationships ----------------------------------------------------------
     case: Mapped["CaseMaster | None"] = relationship(back_populates="act_sections")
     act: Mapped["Act | None"] = relationship("Act", foreign_keys=[ActID])
 
     def __repr__(self) -> str:  # pragma: no cover
-        return (
-            f"<ActSectionAssociation case={self.CaseMasterID} "
-            f"{self.ActID}/{self.SectionID}>"
-        )
+        return f"<ActSectionAssociation case={self.CaseMasterID} {self.ActID}/{self.SectionID}>"
 
 
 class ChargesheetDetails(Base):
-    """One-to-one with CaseMaster: the chargesheet filed for the case."""
+    __tablename__ = "chargesheetdetails"
 
-    __tablename__ = "ChargesheetDetails"
+    CSID: Mapped[int] = mapped_column("csid", Integer, primary_key=True, autoincrement=True)
+    CaseMasterID: Mapped[int | None] = mapped_column("casemasterid", Integer, ForeignKey("casemaster.casemasterid"), nullable=True)
+    csdate: Mapped[datetime | None] = mapped_column("csdate", DateTime, nullable=True)
+    cstype: Mapped[str | None] = mapped_column("cstype", CHAR(1), nullable=True)
+    PolicePersonID: Mapped[int | None] = mapped_column("policepersonid", Integer, ForeignKey("employee.employeeid"), nullable=True)
 
-    CSID: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    CaseMasterID: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("CaseMaster.CaseMasterID"), nullable=True
-    )
-    csdate: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    cstype: Mapped[str | None] = mapped_column(CHAR(1), nullable=True)
-    PolicePersonID: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("Employee.EmployeeID"), nullable=True
-    )
-
-    # Relationships ----------------------------------------------------------
     case: Mapped["CaseMaster | None"] = relationship(back_populates="chargesheet")
-    filed_by: Mapped["Employee | None"] = relationship(  # noqa: F821
-        "Employee", foreign_keys=[PolicePersonID]
-    )
+    filed_by: Mapped["Employee | None"] = relationship("Employee", foreign_keys=[PolicePersonID])
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<ChargesheetDetails {self.CSID} case={self.CaseMasterID}>"
 
 
 class Evidence(Base):
-    """Photo / file evidence attached to a case, with SHA-256 hash for chain-of-custody."""
+    __tablename__ = "evidence"
 
-    __tablename__ = "Evidence"
+    EvidenceID: Mapped[int] = mapped_column("evidenceid", Integer, primary_key=True, autoincrement=True)
+    CaseMasterID: Mapped[int | None] = mapped_column("casemasterid", Integer, ForeignKey("casemaster.casemasterid"), nullable=True)
+    evidence_type: Mapped[str | None] = mapped_column("evidence_type", String(50), nullable=True)
+    file_url: Mapped[str | None] = mapped_column("file_url", Text, nullable=True)
+    file_hash: Mapped[str | None] = mapped_column("file_hash", Text, nullable=True)
+    description: Mapped[str | None] = mapped_column("description", Text, nullable=True)
+    gps_lat: Mapped[float | None] = mapped_column("gps_lat", Numeric(9, 6), nullable=True)
+    gps_lng: Mapped[float | None] = mapped_column("gps_lng", Numeric(9, 6), nullable=True)
+    collected_at: Mapped[datetime | None] = mapped_column("collected_at", DateTime, nullable=True)
+    uploaded_by: Mapped[int | None] = mapped_column("uploaded_by", Integer, ForeignKey("employee.employeeid"), nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column("created_at", DateTime, nullable=True)
 
-    EvidenceID: Mapped[int] = mapped_column(
-        Integer, primary_key=True, autoincrement=True
-    )
-    CaseMasterID: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("CaseMaster.CaseMasterID"), nullable=True
-    )
-    evidence_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    file_url: Mapped[str | None] = mapped_column(Text, nullable=True)
-    file_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
-    description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    gps_lat: Mapped[float | None] = mapped_column(Numeric(9, 6), nullable=True)
-    gps_lng: Mapped[float | None] = mapped_column(Numeric(9, 6), nullable=True)
-    collected_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    uploaded_by: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("Employee.EmployeeID"), nullable=True
-    )
-    created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-
-    # Relationships ----------------------------------------------------------
     case: Mapped["CaseMaster | None"] = relationship(back_populates="evidence")
 
     def __repr__(self) -> str:  # pragma: no cover
@@ -398,40 +223,25 @@ class Evidence(Base):
 
 
 class RecoveredItems(Base):
-    """Items recovered from an accused as part of a case."""
+    __tablename__ = "recovereditems"
 
-    __tablename__ = "RecoveredItems"
+    RecoveryID: Mapped[int] = mapped_column("recoveryid", Integer, primary_key=True, autoincrement=True)
+    CaseMasterID: Mapped[int | None] = mapped_column("casemasterid", Integer, ForeignKey("casemaster.casemasterid"), nullable=True)
+    AccusedMasterID: Mapped[int | None] = mapped_column("accusedmasterid", Integer, ForeignKey("accused.accusedmasterid"), nullable=True)
+    item_description: Mapped[str] = mapped_column("item_description", Text, nullable=False)
+    quantity: Mapped[str | None] = mapped_column("quantity", String(50), nullable=True)
+    estimated_value: Mapped[float | None] = mapped_column("estimated_value", Numeric(12, 2), nullable=True)
+    photo_url: Mapped[str | None] = mapped_column("photo_url", Text, nullable=True)
+    photo_hash: Mapped[str | None] = mapped_column("photo_hash", Text, nullable=True)
+    recovery_date: Mapped[datetime | None] = mapped_column("recovery_date", DateTime, nullable=True)
+    recovery_location: Mapped[str | None] = mapped_column("recovery_location", Text, nullable=True)
+    recovered_by: Mapped[int | None] = mapped_column("recovered_by", Integer, ForeignKey("employee.employeeid"), nullable=True)
+    witness_name: Mapped[str | None] = mapped_column("witness_name", Text, nullable=True)
+    seizure_memo_ref: Mapped[str | None] = mapped_column("seizure_memo_ref", Text, nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column("created_at", DateTime, nullable=True)
 
-    RecoveryID: Mapped[int] = mapped_column(
-        Integer, primary_key=True, autoincrement=True
-    )
-    CaseMasterID: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("CaseMaster.CaseMasterID"), nullable=True
-    )
-    AccusedMasterID: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("Accused.AccusedMasterID"), nullable=True
-    )
-    item_description: Mapped[str] = mapped_column(Text, nullable=False)
-    quantity: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    estimated_value: Mapped[float | None] = mapped_column(
-        Numeric(12, 2), nullable=True
-    )
-    photo_url: Mapped[str | None] = mapped_column(Text, nullable=True)
-    photo_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
-    recovery_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    recovery_location: Mapped[str | None] = mapped_column(Text, nullable=True)
-    recovered_by: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("Employee.EmployeeID"), nullable=True
-    )
-    witness_name: Mapped[str | None] = mapped_column(Text, nullable=True)
-    seizure_memo_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-
-    # Relationships ----------------------------------------------------------
     case: Mapped["CaseMaster | None"] = relationship(back_populates="recovered_items")
     accused: Mapped["Accused | None"] = relationship(back_populates="recovered_items")
 
     def __repr__(self) -> str:  # pragma: no cover
-        return (
-            f"<RecoveredItems {self.RecoveryID} {self.item_description!r}>"
-        )
+        return f"<RecoveredItems {self.RecoveryID} {self.item_description!r}>"

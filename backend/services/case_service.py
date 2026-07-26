@@ -250,12 +250,18 @@ class CaseService(BaseService):
 
         # district
         if filters.district_id is None and filters.district:
+            d_val = filters.district.strip().lower()
             row = self._session.execute(
                 select(District.DistrictID).where(
-                    func.lower(District.DistrictName)
-                    == filters.district.strip().lower()
+                    func.lower(District.DistrictName) == d_val
                 )
             ).first()
+            if row is None:
+                row = self._session.execute(
+                    select(District.DistrictID).where(
+                        District.DistrictName.ilike(f"%{d_val}%")
+                    )
+                ).first()
             if row is None:
                 return {"__no_match__": 1}
             resolved["district_id"] = row[0]
@@ -264,12 +270,18 @@ class CaseService(BaseService):
 
         # police station
         if filters.police_station_id is None and filters.police_station:
+            ps_val = filters.police_station.strip().lower()
             row = self._session.execute(
                 select(Unit.UnitID).where(
-                    func.lower(Unit.UnitName)
-                    == filters.police_station.strip().lower()
+                    func.lower(Unit.UnitName) == ps_val
                 )
             ).first()
+            if row is None:
+                row = self._session.execute(
+                    select(Unit.UnitID).where(
+                        Unit.UnitName.ilike(f"%{ps_val}%")
+                    )
+                ).first()
             if row is None:
                 return {"__no_match__": 1}
             resolved["police_station_id"] = row[0]
@@ -278,12 +290,18 @@ class CaseService(BaseService):
 
         # crime head (major)
         if filters.crime_head_id is None and filters.crime_head:
+            ch_val = filters.crime_head.strip().lower()
             row = self._session.execute(
                 select(CrimeHead.CrimeHeadID).where(
-                    func.lower(CrimeHead.CrimeGroupName)
-                    == filters.crime_head.strip().lower()
+                    func.lower(CrimeHead.CrimeGroupName) == ch_val
                 )
             ).first()
+            if row is None:
+                row = self._session.execute(
+                    select(CrimeHead.CrimeHeadID).where(
+                        CrimeHead.CrimeGroupName.ilike(f"%{ch_val}%")
+                    )
+                ).first()
             if row is None:
                 return {"__no_match__": 1}
             resolved["crime_head_id"] = row[0]
@@ -292,12 +310,18 @@ class CaseService(BaseService):
 
         # crime sub head (minor)
         if filters.crime_sub_head_id is None and filters.crime_sub_head:
+            csh_val = filters.crime_sub_head.strip().lower()
             row = self._session.execute(
                 select(CrimeSubHead.CrimeSubHeadID).where(
-                    func.lower(CrimeSubHead.CrimeHeadName)
-                    == filters.crime_sub_head.strip().lower()
+                    func.lower(CrimeSubHead.CrimeHeadName) == csh_val
                 )
             ).first()
+            if row is None:
+                row = self._session.execute(
+                    select(CrimeSubHead.CrimeSubHeadID).where(
+                        CrimeSubHead.CrimeHeadName.ilike(f"%{csh_val}%")
+                    )
+                ).first()
             if row is None:
                 return {"__no_match__": 1}
             resolved["crime_sub_head_id"] = row[0]
@@ -306,17 +330,24 @@ class CaseService(BaseService):
 
         # status
         if filters.status_id is None and filters.status:
+            st_val = filters.status.strip().lower()
             row = self._session.execute(
                 select(CaseStatusMaster.CaseStatusID).where(
-                    func.lower(CaseStatusMaster.CaseStatusName)
-                    == filters.status.strip().lower()
+                    func.lower(CaseStatusMaster.CaseStatusName) == st_val
                 )
             ).first()
+            if row is None:
+                row = self._session.execute(
+                    select(CaseStatusMaster.CaseStatusID).where(
+                        CaseStatusMaster.CaseStatusName.ilike(f"%{st_val}%")
+                    )
+                ).first()
             if row is None:
                 return {"__no_match__": 1}
             resolved["status_id"] = row[0]
         elif filters.status_id is not None:
             resolved["status_id"] = filters.status_id
+
 
         return resolved
 

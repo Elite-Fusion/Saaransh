@@ -391,18 +391,29 @@ class AnalyticsService(BaseService):
         """
         if ref is None:
             return None
+        if isinstance(ref, str):
+            ref = DistrictRef(name=ref)
         if ref.district_id is not None:
             return ref.district_id
         if ref.name:
+            d_val = ref.name.strip().lower()
             row = self._session.execute(
                 select(District.DistrictID).where(
-                    func.lower(District.DistrictName) == ref.name.strip().lower()
+                    func.lower(District.DistrictName) == d_val
                 )
             ).first()
+            if row is None:
+                row = self._session.execute(
+                    select(District.DistrictID).where(
+                        District.DistrictName.ilike(f"%{d_val}%")
+                    )
+                ).first()
             if row is None:
                 return "__no_match__"
             return row[0]
         return None
+
+
 
     @staticmethod
     def _apply_district_join(stmt, district_id):

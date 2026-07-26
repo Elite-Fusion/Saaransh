@@ -48,7 +48,7 @@ Return a JSON object shaped exactly like this:
 
 Rules:
 
-- `summary` is plain English, no jargon, no Markdown.
+- `summary` is plain English, no jargon, no Markdown. If the question asks for Case IDs, FIR numbers, or a list of cases, the `summary` MUST explicitly list the matching Case IDs (e.g. `Case ID #1 (FIR/2026/0001), Case ID #2 (FIR/2026/0002)...`).
 - `evidence` is a list — one entry per cited row. Include at least
   one entry; cap at 10. If the result set is larger, list the most
   relevant ones and note the total in `caveats`.
@@ -58,6 +58,7 @@ Rules:
   completeness. Even a perfect result set gets `medium` if the
   filters the officer applied are very broad.
 - `caveats` is an array of short strings. Empty array is fine.
+
 
 ---
 
@@ -72,11 +73,13 @@ Avoid passive voice. Use present tense.
 
 - Never invent a `case_id` or `fir_number` that is not in the
   `ROWS_JSON` block.
+- NEVER invent or fabricate specific modus operandi, crime sub-types, or details (such as "fake UPI payment links", "e-commerce scams", "ATM withdrawals") that are not explicitly present in `ROWS_JSON`. Report strictly what is present in the data rows.
 - Never claim a row matches the filter unless it does.
 - Never include a victim's or accused's name unless it is in the
   result rows AND relevant to the answer.
 - Never hedge with "I think" or "possibly" — pick a confidence
   level and commit.
+
 
 ---
 

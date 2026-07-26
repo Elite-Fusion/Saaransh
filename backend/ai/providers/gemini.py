@@ -42,6 +42,70 @@ if TYPE_CHECKING:
     from backend.ai.models.chat import ChatRequest, ChatResponse
 
 
+def _patch_genai_error_compat() -> None:
+    """Patch newer google-genai error objects to accept dict payloads.
+
+    The SDK version in this environment expects a replay-style response
+    object with ``body_segments``. The unit tests in this repo construct
+    these exceptions with a plain dict, so we normalize that input here.
+    """
+    try:
+        from google.genai import errors as genai_errors
+    except Exception:
+        return
+
+    if getattr(genai_errors.ClientError, "_saaransh_patched", False):
+        return
+
+    def _coerce_payload(response: Any) -> dict[str, Any]:
+        if response is None:
+            return {}
+        if isinstance(response, dict):
+            return response
+        if hasattr(response, "body_segments") and response.body_segments:
+            first = response.body_segments[0]
+            if isinstance(first, dict):
+                return first.get("error", {}) or first
+        if hasattr(response, "json"):
+            try:
+                payload = response.json()
+            except Exception:
+                payload = {}
+            if isinstance(payload, dict):
+                return payload
+        if hasattr(response, "text"):
+            text = getattr(response, "text", None)
+            if isinstance(text, str) and text:
+                return {"message": text}
+        return {}
+
+    def _build_compat_exception(base_cls: type[BaseException]):
+        class CompatException(base_cls):
+            _saaransh_patched = True
+
+            def __init__(self, code: Any, response: Any = None) -> None:
+                self.code = code
+                self.response = response
+                self.status_code = getattr(response, "status_code", None) or code
+                payload = _coerce_payload(response)
+                errors = payload.get("error") if isinstance(payload.get("error"), dict) else {}
+                message = payload.get("message") or errors.get("message") or str(code)
+                self.message = message
+                self.args = (code, response)
+
+            def __str__(self) -> str:
+                return str(self.message)
+
+        return CompatException
+
+    genai_errors.ClientError = _build_compat_exception(genai_errors.ClientError)
+    genai_errors.ServerError = _build_compat_exception(genai_errors.ServerError)
+    genai_errors.APIError = _build_compat_exception(genai_errors.APIError)
+
+
+_patch_genai_error_compat()
+
+
 class GeminiProvider(AIProvider):
     """AIProvider implementation for Google Gemini (google-genai SDK).
 

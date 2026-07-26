@@ -50,7 +50,7 @@ from backend.ai.services.sql_generation_service import (
 
 def _gen_sql_json(
     *,
-    sql: str = "SELECT CaseMasterID, CrimeNo FROM CaseMaster",
+    sql: str = "SELECT casemasterid, crimeno FROM casemaster",
     params: dict | None = None,
     tables: list[str] | None = None,
     estimated_rows: str = "low",
@@ -60,7 +60,7 @@ def _gen_sql_json(
         {
             "sql": sql,
             "params": params or {},
-            "tables": tables or ["CaseMaster"],
+            "tables": tables or ["casemaster"],
             "estimated_rows": estimated_rows,
             "notes": notes,
         }
@@ -89,8 +89,8 @@ class TestSQLGenerationHappyPath:
         )
         out = service.generate("List all cases.")
         assert isinstance(out, GeneratedSQL)
-        assert out.sql == "SELECT CaseMasterID, CrimeNo FROM CaseMaster"
-        assert out.tables == ["CaseMaster"]
+        assert out.sql == "SELECT casemasterid, crimeno FROM casemaster"
+        assert out.tables == ["casemaster"]
         assert out.estimated_rows == "low"
         assert out.notes == ""
 
@@ -99,7 +99,7 @@ class TestSQLGenerationHappyPath:
     ):
         chat_service.chat_with_prompt.return_value = chat_response_factory(
             content=_gen_sql_json(
-                sql="SELECT * FROM CaseMaster WHERE CaseMasterID = :id",
+                sql="SELECT * FROM casemaster WHERE casemasterid = :id",
                 params={":id": 12},
             )
         )
@@ -259,9 +259,9 @@ class TestSQLGenerationSchemaSummary:
     ):
         # The default summary mentions every allowlisted table.
         summary = service.schema_summary
-        assert "CaseMaster" in summary
-        assert "Accused" in summary
-        assert "Victim" in summary
+        assert "casemaster" in summary
+        assert "accused" in summary
+        assert "victim" in summary
 
 
 # ---------------------------------------------------------------------

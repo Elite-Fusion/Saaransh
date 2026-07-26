@@ -26,6 +26,7 @@ if str(PROJECT_ROOT) not in sys.path:
 # The actual key value is irrelevant — every test that touches
 # the provider layer uses a client_factory that returns a mock.
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
+os.environ["DEBUG"] = "true"
 
 from backend.config import settings  # noqa: E402
 from backend.config.logging import configure_logging  # noqa: E402

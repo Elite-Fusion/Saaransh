@@ -258,6 +258,80 @@ class TestIntentServiceRegexOnly:
         with pytest.raises(UnknownIntent):
             regex_service.classify("      ")
 
+    def test_count_phrase_is_dashboard(self, regex_service):
+        """Officers ask "Count X" all the time; that should be a
+        dashboard / aggregation request, not a list query."""
+        out = regex_service.classify("Count theft cases")
+        assert out.intent is Intent.DASHBOARD_ANALYTICS
+
+    def test_total_phrase_is_dashboard(self, regex_service):
+        out = regex_service.classify("What is the total number of murder cases?")
+        assert out.intent is Intent.DASHBOARD_ANALYTICS
+
+    def test_aggregate_phrase_is_dashboard(self, regex_service):
+        out = regex_service.classify("Aggregate of cyber crime complaints in 2024")
+        assert out.intent is Intent.DASHBOARD_ANALYTICS
+
+    def test_show_specific_fir_is_explain_case(self, regex_service):
+        """``Show FIR <id>`` is a request about a specific case, not
+        a list query. We must classify it as EXPLAIN_CASE so the
+        orchestrator fetches the case via CaseService.get_case_detail."""
+        out = regex_service.classify("Show FIR 104430003202400098")
+        assert out.intent is Intent.EXPLAIN_CASE
+
+    def test_show_specific_case_is_explain_case(self, regex_service):
+        out = regex_service.classify("Show me case 47")
+        assert out.intent is Intent.EXPLAIN_CASE
+
+    def test_give_me_specific_fir_is_explain_case(self, regex_service):
+        out = regex_service.classify("Give me FIR 104430003202400098")
+        assert out.intent is Intent.EXPLAIN_CASE
+
+
+# ---------------------------------------------------------------------
+# The Phase 7 verification list of natural-language questions
+# ---------------------------------------------------------------------
+
+
+VERIFICATION_QUESTIONS: list[tuple[str, Intent]] = [
+    ("Show all murder cases", Intent.CASE_SEARCH),
+    ("Show all murder cases in Mysuru", Intent.CASE_SEARCH),
+    ("List robbery FIRs", Intent.CASE_SEARCH),
+    ("Find cyber crime complaints", Intent.CASE_SEARCH),
+    ("Show theft cases in Bengaluru", Intent.CASE_SEARCH),
+    ("Show open cases", Intent.CASE_SEARCH),
+    ("Show charge sheeted cases", Intent.CASE_SEARCH),
+    ("How many murder cases are there?", Intent.DASHBOARD_ANALYTICS),
+    ("Count theft cases", Intent.DASHBOARD_ANALYTICS),
+    ("Show FIR 104430003202400098", Intent.EXPLAIN_CASE),
+]
+
+
+class TestIntentServiceVerificationList:
+    """Locks down the regex fallback for the exact 10 questions
+    listed in the Phase 7 verification checklist. The LLM path is
+    not used here — these tests intentionally exercise the regex
+    fallback so a future change to the LLM prompt cannot regress
+    the deterministic safety net."""
+
+    @pytest.fixture
+    def regex_service(self, chat_service, chat_response_factory):
+        chat_service.chat_with_prompt.return_value = chat_response_factory(
+            content="not json at all"
+        )
+        return IntentService(chat_service=chat_service)
+
+    @pytest.mark.parametrize(
+        "question,expected",
+        VERIFICATION_QUESTIONS,
+        ids=[q for q, _ in VERIFICATION_QUESTIONS],
+    )
+    def test_classification(self, regex_service, question, expected):
+        out = regex_service.classify(question)
+        assert out.intent is expected, (
+            f"Expected {expected!r} for {question!r}, got {out.intent!r}"
+        )
+
 
 # ---------------------------------------------------------------------
 # Prompt file actually loaded

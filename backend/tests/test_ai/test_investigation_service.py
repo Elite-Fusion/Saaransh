@@ -500,3 +500,251 @@ class TestInvestigationFallbackExplanation:
         out = service.investigate("List cases in Mysuru.", request_id="r")
         assert out.explanation is not None
         assert out.explanation.confidence == "low"
+
+
+# ---------------------------------------------------------------------
+# Phase 8 — Hybrid pipeline: service path first, SQL fallback
+# ---------------------------------------------------------------------
+#
+# The hybrid pipeline runs the service-method path first (faster,
+# safer, eager-loaded relations) and falls through to the SQL
+# pipeline when a question contains a phrase the service path
+# cannot answer (date range, "compare", "highest", "near <locality>",
+# "repeat offender"). These tests exercise the wiring end-to-end
+# with a fully-mocked collaborator graph.
+
+
+def _make_execution_result(
+    rows: list[dict] | None = None,
+    columns: list[str] | None = None,
+    sql: str = "SELECT 1",
+) -> SimpleNamespace:
+    """Build an :class:`ExecutionResult`-shaped mock.
+
+    We use ``SimpleNamespace`` because the dataclass is frozen and
+    accepts only the real columns; a mock is more ergonomic.
+    """
+    rows = rows or [{"count": 1}]
+    columns = columns or ["count"]
+    return SimpleNamespace(
+        columns=columns,
+        rows=rows,
+        row_count=len(rows),
+        sql=sql,
+        params={},
+        truncated=False,
+    )
+
+
+class TestHybridSqlFallback:
+    def test_routes_to_sql_when_question_has_between(
+        self, service, deps
+    ):
+        """A "between" date range escalates to the SQL path."""
+        deps.intent_service.classify.return_value = _intent_response(
+            Intent.CASE_SEARCH
+        )
+        deps.ai_query_service.execute_validated_sql.return_value = (
+            _make_execution_result(
+                rows=[{"CaseMasterID": 7, "CrimeNo": "1044"}],
+                columns=["CaseMasterID", "CrimeNo"],
+                sql=(
+                    "SELECT CaseMasterID, CrimeNo FROM CaseMaster "
+                    "WHERE CrimeRegisteredDate BETWEEN :d1 AND :d2"
+                ),
+            )
+        )
+        out = service.investigate(
+            "Show crimes between 2024-01-01 and 2024-06-30",
+            request_id="r",
+        )
+        assert out.operation is OperationType.SQL
+        assert out.raw_sql is not None
+        assert "BETWEEN" in out.raw_sql.upper()
+        # The SQL path's rows are exposed as the new ``results`` field.
+        assert out.results is not None
+        assert out.results[0]["CaseMasterID"] == 7
+
+    def test_routes_to_sql_when_question_asks_for_highest(
+        self, service, deps
+    ):
+        deps.intent_service.classify.return_value = _intent_response(
+            Intent.DASHBOARD_ANALYTICS
+        )
+        deps.ai_query_service.execute_validated_sql.return_value = (
+            _make_execution_result(
+                rows=[{"district": "Bengaluru", "theft_count": 42}],
+                columns=["district", "theft_count"],
+                sql=(
+                    "SELECT district, COUNT(*) AS theft_count "
+                    "FROM CaseMaster GROUP BY district "
+                    "ORDER BY theft_count DESC LIMIT 1"
+                ),
+            )
+        )
+        out = service.investigate(
+            "Which district has the highest theft?",
+            request_id="r",
+        )
+        assert out.operation is OperationType.SQL
+        assert out.raw_sql is not None
+        assert "ORDER BY" in out.raw_sql.upper()
+
+    def test_routes_to_sql_when_question_asks_to_compare(
+        self, service, deps
+    ):
+        deps.intent_service.classify.return_value = _intent_response(
+            Intent.DASHBOARD_ANALYTICS
+        )
+        deps.ai_query_service.execute_validated_sql.return_value = (
+            _make_execution_result(
+                rows=[
+                    {"district": "Mysuru", "case_count": 12},
+                    {"district": "Bengaluru", "case_count": 30},
+                ],
+                columns=["district", "case_count"],
+            )
+        )
+        out = service.investigate(
+            "Compare Mysuru and Bengaluru crime",
+            request_id="r",
+        )
+        assert out.operation is OperationType.SQL
+
+    def test_routes_to_sql_when_question_mentions_near(
+        self, service, deps
+    ):
+        deps.intent_service.classify.return_value = _intent_response(
+            Intent.CASE_SEARCH
+        )
+        deps.ai_query_service.execute_validated_sql.return_value = (
+            _make_execution_result(
+                rows=[{"CaseMasterID": 11}],
+                columns=["CaseMasterID"],
+            )
+        )
+        out = service.investigate(
+            "Show crimes near Whitefield", request_id="r"
+        )
+        assert out.operation is OperationType.SQL
+
+    def test_routes_to_sql_when_question_mentions_repeat_offender(
+        self, service, deps
+    ):
+        deps.intent_service.classify.return_value = _intent_response(
+            Intent.CASE_SEARCH
+        )
+        deps.ai_query_service.execute_validated_sql.return_value = (
+            _make_execution_result(
+                rows=[{"AccusedName": "X", "case_count": 4}],
+                columns=["AccusedName", "case_count"],
+            )
+        )
+        out = service.investigate(
+            "Show repeat offenders in Mysuru", request_id="r"
+        )
+        assert out.operation is OperationType.SQL
+
+    def test_routes_to_service_when_filter_is_known(
+        self, service, deps
+    ):
+        """A "murder cases in Mysuru" question is fully answered
+        by the service path; the SQL pipeline is not invoked."""
+        deps.intent_service.classify.return_value = _intent_response(
+            Intent.CASE_SEARCH
+        )
+        out = service.investigate(
+            "Show all murder cases in Mysuru", request_id="r"
+        )
+        assert out.operation is OperationType.SERVICE
+        # The executor must never have been called.
+        deps.ai_query_service.execute_validated_sql.assert_not_called()
+        # The service path does not expose the raw row dicts.
+        assert out.results is None
+
+    def test_sql_path_populates_results_field(self, service, deps):
+        deps.intent_service.classify.return_value = _intent_response(
+            Intent.CASE_SEARCH
+        )
+        deps.ai_query_service.execute_validated_sql.return_value = (
+            _make_execution_result(
+                rows=[
+                    {"CaseMasterID": 1, "CrimeNo": "1044"},
+                    {"CaseMasterID": 2, "CrimeNo": "1045"},
+                ],
+                columns=["CaseMasterID", "CrimeNo"],
+            )
+        )
+        out = service.investigate(
+            "Show crimes between 2024-01-01 and 2024-06-30",
+            request_id="r",
+        )
+        assert out.results is not None
+        assert len(out.results) == 2
+        # Every row is a dict whose keys are the executor's columns.
+        assert set(out.results[0].keys()) == {"CaseMasterID", "CrimeNo"}
+        assert out.row_count == 2
+
+    def test_sql_path_populates_raw_sql_and_columns(
+        self, service, deps
+    ):
+        deps.intent_service.classify.return_value = _intent_response(
+            Intent.CASE_SEARCH
+        )
+        deps.ai_query_service.execute_validated_sql.return_value = (
+            _make_execution_result(
+                rows=[{"CaseMasterID": 1}],
+                columns=["CaseMasterID"],
+                sql="SELECT CaseMasterID FROM CaseMaster LIMIT 1",
+            )
+        )
+        out = service.investigate(
+            "Show crimes between 2024-01-01 and 2024-06-30",
+            request_id="r",
+        )
+        assert out.raw_sql is not None
+        assert out.columns == ["CaseMasterID"]
+
+    def test_unvalidated_sql_does_not_execute(self, service, deps):
+        """Defence in depth: the validator runs before the executor.
+        When the validator raises ``UnsafeSQL``, the executor is
+        never called and the service-path result is preserved."""
+        deps.intent_service.classify.return_value = _intent_response(
+            Intent.CASE_SEARCH
+        )
+        deps.sql_val_service.validate.side_effect = UnsafeSQL(
+            "DROP is forbidden", category="forbidden_verb"
+        )
+        out = service.investigate(
+            "Show crimes between 2024-01-01 and 2024-06-30",
+            request_id="r",
+        )
+        # The service path still produced a row (the mock returns
+        # one by default), so we keep the SERVICE operation and
+        # surface a caveat about the rejected fallback.
+        assert out.operation is OperationType.SERVICE
+        assert any(
+            "SQL fallback rejected" in a for a in out.assumptions
+        )
+        deps.ai_query_service.execute_validated_sql.assert_not_called()
+
+    def test_sql_executor_failure_keeps_service_result(
+        self, service, deps
+    ):
+        """If the SQL executor raises, the service-path result is
+        kept and a caveat is added to ``assumptions``."""
+        deps.intent_service.classify.return_value = _intent_response(
+            Intent.CASE_SEARCH
+        )
+        deps.ai_query_service.execute_validated_sql.side_effect = (
+            ExecutionFailure("db timeout")
+        )
+        out = service.investigate(
+            "Show crimes between 2024-01-01 and 2024-06-30",
+            request_id="r",
+        )
+        assert out.operation is OperationType.SERVICE
+        assert any(
+            "SQL fallback execution failed" in a
+            for a in out.assumptions
+        )

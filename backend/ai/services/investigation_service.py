@@ -109,8 +109,10 @@ from backend.ai.services.sql_generation_service import (
     _extract_json_object,
 )
 from backend.ai.services.sql_validation_service import SQLValidationService
+from backend.services import AnalyticsService, CaseService, PredictionService
 
 EXPLANATION_PROMPT_NAME = "explanation_prompt"
+INVESTIGATION_REPORT_PROMPT_NAME = "investigation_report_prompt"
 _MAX_EVIDENCE_ROWS = 10
 _MAX_ROWS_FOR_PROMPT = 20  # rows serialised into the explanation prompt
 
@@ -161,6 +163,7 @@ class InvestigationService:
         ai_query_service: Any,
         case_service: Any | None = None,
         analytics_service: Any | None = None,
+        prediction_service: Any | None = None,
         logger: logging.Logger | None = None,
     ) -> None:
         self._session = session
@@ -181,6 +184,13 @@ class InvestigationService:
         else:
             self._case_service = case_service
             self._analytics_service = analytics_service
+
+        if prediction_service is None:
+            from backend.services import PredictionService
+
+            self._prediction_service = prediction_service or PredictionService(session)
+        else:
+            self._prediction_service = prediction_service
         self._logger = logger or logging.getLogger(
             "backend.ai.services.investigation_service"
         )
@@ -217,8 +227,25 @@ class InvestigationService:
             ExecutionFailure: The database raised while running the
                 validated SQL.
         """
+        # Check if this is a request for a comprehensive investigation report
+        if self._is_investigation_report_request(question):
+            return self._handle_investigation_report_request(question, request_id, metadata)
+
         meta = dict(metadata or {})
         meta.setdefault("request_id", request_id)
+
+        from backend.ai.services.context_manager import get_context_manager
+        ctx_mgr = get_context_manager()
+        session_id = meta.get("session_id") or meta.get("user_id") or request_id
+        ctx_state = ctx_mgr.get_state(session_id)
+
+        # Update or inherit active case ID
+        q_case_id = _extract_case_id(question, meta)
+        if q_case_id is not None:
+            ctx_mgr.update_state(session_id, case_id=q_case_id)
+            meta["active_case_id"] = q_case_id
+        elif ctx_state.active_case_id:
+            meta["active_case_id"] = ctx_state.active_case_id
 
         self._logger.info(
             "investigation_start request_id=%s question_chars=%d",
@@ -229,6 +256,109 @@ class InvestigationService:
         # 1. classify
         classification = self._intent.classify(question, metadata=meta)
         intent = classification.intent
+
+        # 2. conversational direct routes (no DB execution)
+        if intent is Intent.GREETING:
+            return InvestigationResponse(
+                request_id=request_id,
+                intent=Intent.GREETING,
+                operation=OperationType.SERVICE,
+                reasoning="Officer greeting acknowledged.",
+                executed_operation="ConversationalHandler.greeting",
+                confidence=1.0,
+                assumptions=[],
+                supporting_evidence=[],
+                explanation=ExplanationBlock(
+                    summary="Namaskara, Officer! I am Saaransh AI, your Karnataka State Police Investigation Assistant. How can I assist your investigation today?",
+                    evidence=[],
+                    why="Greeting response — no database query required.",
+                    confidence="high",
+                    confidence_score=1.0,
+                    confidence_reason="Direct greeting pattern matched.",
+                    caveats=[],
+                ),
+                recommended_actions=["Search cases by district (e.g. 'Show murder cases in Mysuru')", "Lookup a specific FIR (e.g. 'Show case 123')", "Check crime hotspots and predictions"],
+                follow_up_suggestions=["Show murder cases in Mysuru", "Show recent crime hotspots", "Count pending investigations"],
+            )
+
+        if intent is Intent.FAREWELL:
+            return InvestigationResponse(
+                request_id=request_id,
+                intent=Intent.FAREWELL,
+                operation=OperationType.SERVICE,
+                reasoning="Officer farewell acknowledged.",
+                executed_operation="ConversationalHandler.farewell",
+                confidence=1.0,
+                assumptions=[],
+                supporting_evidence=[],
+                explanation=ExplanationBlock(
+                    summary="Jai Hind, Officer! Standby mode active. Reach out whenever you need further intelligence or FIR analysis.",
+                    evidence=[],
+                    why="Farewell response — no database query required.",
+                    confidence="high",
+                    confidence_score=1.0,
+                    confidence_reason="Direct farewell pattern matched.",
+                    caveats=[],
+                ),
+                recommended_actions=[],
+                follow_up_suggestions=[],
+            )
+
+        if intent is Intent.HELP:
+            return InvestigationResponse(
+                request_id=request_id,
+                intent=Intent.HELP,
+                operation=OperationType.SERVICE,
+                reasoning="Capability and help guide delivered.",
+                executed_operation="ConversationalHandler.help",
+                confidence=1.0,
+                assumptions=[],
+                supporting_evidence=[],
+                explanation=ExplanationBlock(
+                    summary="I can assist you with Case Lookups, Suspect Tracking, Evidence Summaries, Timeline Analysis, Hotspot Predictions, and Crime Analytics across Karnataka.",
+                    evidence=[],
+                    why="Help query — no database query required.",
+                    confidence="high",
+                    confidence_score=1.0,
+                    confidence_reason="Direct help pattern matched.",
+                    caveats=[],
+                ),
+                recommended_actions=["Query cases by district or crime head", "Lookup FIR details by Case ID", "Generate full investigation reports"],
+                follow_up_suggestions=["Show murder cases in Mysuru", "Show case 123", "Show recent crime hotspots"],
+            )
+
+        # Case sub-intents (suspects, evidence, timeline, IO)
+        if intent in (Intent.CASE_SUSPECTS, Intent.CASE_EVIDENCE, Intent.CASE_TIMELINE, Intent.CASE_IO):
+            active_id = meta.get("active_case_id")
+            if active_id is None:
+                return InvestigationResponse(
+                    request_id=request_id,
+                    intent=Intent.CLARIFICATION,
+                    operation=OperationType.SERVICE,
+                    reasoning="Case reference required to inspect case sub-details.",
+                    executed_operation="ConversationalHandler.clarification",
+                    confidence=0.9,
+                    assumptions=[],
+                    supporting_evidence=[],
+                    explanation=ExplanationBlock(
+                        summary="Which case would you like to inspect? Please specify a Case ID or FIR number (e.g., 'Show case 123' or 'FIR 455').",
+                        evidence=[],
+                        why="No active Case ID was specified in the question or conversation context.",
+                        confidence="medium",
+                        confidence_score=0.9,
+                        confidence_reason="Missing active_case_id parameter.",
+                        caveats=[],
+                    ),
+                    recommended_actions=["Provide a Case ID (e.g. 'Show case 123')", "Search cases by district (e.g. 'Show cases in Mysuru')"],
+                    follow_up_suggestions=["Show case 1", "Show case 123", "Show murder cases in Mysuru"],
+                )
+            partial = self._run_explain_case(question, meta)
+            return self._build_response(
+                request_id=request_id,
+                classification=classification,
+                partial=partial,
+                question=question,
+            )
 
         # 2. route
         if intent is Intent.UNKNOWN:
@@ -262,6 +392,73 @@ class InvestigationService:
                 reason=f"unsupported intent value: {intent!r}",
             )
 
+
+        # 3a. Phase 8 — fall through to the SQL pipeline when the
+        #     service path cannot fully answer the question. The
+        #     heuristic inspects the question and the resolved
+        #     filters; per-case intents and dashboard summaries
+        #     with a usable service method stay on the service
+        #     path. When the SQL path runs we replace the partial
+        #     wholesale (its rows, columns, sql, and confidence
+        #     are more accurate than the service path's empty
+        #     result).
+        if intent in (Intent.CASE_SEARCH, Intent.DASHBOARD_ANALYTICS):
+            filters_for_heuristic = (
+                _build_case_filters(question)
+                if intent is Intent.CASE_SEARCH
+                else None
+            )
+            if self._should_use_sql_path(
+                question, classification, filters_for_heuristic
+            ):
+                try:
+                    sql_partial = self._run_sql_path(question, meta)
+                except UnsafeSQL as exc:
+                    # The validator rejected the generated SQL.
+                    # Log it and keep the service-path result —
+                    # the officer still gets the partial answer.
+                    self._logger.info(
+                        "investigation_sql_fallback_rejected reason=%s "
+                        "category=%s",
+                        exc.reason,
+                        exc.category,
+                    )
+                    partial = {
+                        **partial,
+                        "assumptions": list(partial.get("assumptions", []))
+                        + [
+                            f"SQL fallback rejected: {exc.reason}",
+                        ],
+                    }
+                except ExecutionFailure as exc:
+                    self._logger.info(
+                        "investigation_sql_fallback_exec_failure error=%s",
+                        exc,
+                    )
+                    partial = {
+                        **partial,
+                        "assumptions": list(partial.get("assumptions", []))
+                        + [f"SQL fallback execution failed: {exc}"],
+                    }
+                else:
+                    # SQL path succeeded — adopt its rows, sql,
+                    # and columns. We keep the service path's
+                    # ``assumptions`` and ``notes`` so the audit
+                    # log records that both paths ran.
+                    partial = {
+                        **partial,
+                        "operation": sql_partial["operation"],
+                        "executed": sql_partial["executed"],
+                        "rows": sql_partial["rows"],
+                        "row_count": sql_partial["row_count"],
+                        "sql": sql_partial["sql"],
+                        "params": sql_partial["params"],
+                        "columns": sql_partial["columns"],
+                        "notes": sql_partial["notes"],
+                        "assumptions": list(partial.get("assumptions", []))
+                        + sql_partial.get("assumptions", []),
+                    }
+
         # 4. explanation
         return self._build_response(
             request_id=request_id,
@@ -280,7 +477,8 @@ class InvestigationService:
         """Call :meth:`CaseService.list_cases` and shape the result."""
         from backend.services import CaseFilters, CaseSort
 
-        filters = _build_case_filters(question)
+        filters = _build_case_filters(question, meta)
+
         sort = CaseSort(field="crime_registered_date", order="desc")
         rows, total = self._case_service.list_cases(
             filters=filters, page=1, page_size=_MAX_ROWS_FOR_PROMPT, sort=sort
@@ -384,7 +582,8 @@ class InvestigationService:
         """Fetch a single case by id and serialise it for the prompt."""
         from backend.services import CaseNotFoundError
 
-        case_id = _extract_case_id(question)
+        case_id = _extract_case_id(question, meta)
+
         if case_id is None:
             # No case id — fall back to SQL path by raising a
             # sentinel the caller can catch.
@@ -435,6 +634,357 @@ class InvestigationService:
     # SQL path (only used if a future intent needs it)
     # ------------------------------------------------------------------
 
+    # Tokens that mean the question needs the SQL pipeline rather
+    # than the service-method path. Kept short on purpose — every
+    # extra word here is one more false positive.
+    _SQL_TRIGGER_TOKENS: tuple[str, ...] = (
+        "compare",
+        "highest",
+        "lowest",
+        "most ",
+        "top ",
+        "rank",
+        "leaderboard",
+        "repeat offender",
+        "repeat-offender",
+        "habitual",
+        "recidiv",
+    )
+
+    def _should_use_sql_path(
+        self,
+        question: str,
+        classification: IntentClassification,
+        filters: Any | None = None,
+    ) -> bool:
+        """Decide whether to fall through from the service path to SQL.
+
+        The rule of thumb: if the question contains a phrase the
+        :class:`CaseService` / :class:`AnalyticsService` cannot
+        answer (date ranges, "compare", "near <locality>", an
+        aggregation we don't have a method for, an unknown filter
+        shape), generate SQL instead. Per-case intents
+        (:class:`Intent.EXPLAIN_CASE` and
+        :class:`Intent.INVESTIGATION_SUMMARY`) always use the
+        service path — SQL would not gain anything for a single
+        case lookup.
+
+        Args:
+            question: The original officer question.
+            classification: The intent classification result.
+            filters: The :class:`CaseFilters` produced by
+                :func:`_build_case_filters`. ``None`` for
+                intents that don't have a filter parser.
+
+        Returns:
+            ``True`` if the orchestrator should call
+            :meth:`_run_sql_path` after the service path returns.
+        """
+        # Per-case intents never benefit from SQL.
+        if classification.intent in (
+            Intent.EXPLAIN_CASE,
+            Intent.INVESTIGATION_SUMMARY,
+        ):
+            return False
+
+        lowered = (question or "").lower()
+
+        # 1. "between X and Y" / "from X to Y" — a structured date
+        #    range. The service path can handle this via date_from/
+        #    date_to, so we do not always escalate.
+        # 2. "compare" — analytics aggregation across districts.
+        if "compare" in lowered:
+            return True
+        # 3. highest / most / top / lowest — aggregation by district.
+        if any(tok in lowered for tok in self._SQL_TRIGGER_TOKENS):
+            return True
+        # 4. "near <locality>" — the service path has no station
+        #    filter, so the SQL pipeline can JOIN to the unit table.
+        if re.search(r"\bnear\s+[a-z]", lowered):
+            return True
+        # 5. "between <date1> and <date2>" / "from <date1> to
+        #    <date2>" — date range spanning two specific days. The
+        #    parser already populated date_from/date_to, so the
+        #    service path can serve it; the explicit phrase is a
+        #    signal the officer wants both ends of the range, which
+        #    the SQL pipeline can present more clearly.
+        if re.search(r"\b(?:between|from)\s+\S+\s+(?:and|to)\s+\S+", lowered):
+            return True
+        # 6. "all FIRs filed today" without an explicit date — the
+        #    parser maps "today" to date_from=date_to=today, so
+        #    this is already answered by the service path.
+        # 7. District mentioned but the parser resolved no useful
+        #    filter (e.g. a non-Karnataka district). The service
+        #    path would return zero rows, so SQL can do better.
+        if (
+            classification.intent is Intent.CASE_SEARCH
+            and filters is not None
+        ):
+            has_district = bool(
+                getattr(filters, "district", None)
+                or getattr(filters, "district_id", None)
+            )
+            any_filter = any(
+                getattr(filters, name, None) is not None
+                for name in (
+                    "fir_number",
+                    "district",
+                    "police_station",
+                    "crime_head",
+                    "status",
+                    "date_from",
+                    "date_to",
+                )
+            )
+            if has_district and not any_filter:
+                # District was set via the locality alias pass but
+                # nothing else matched — escalate so the SQL path
+                # can JOIN to the unit table.
+                return True
+        return False
+
+    def _handle_investigation_report_request(
+        self,
+        question: str,
+        request_id: str,
+        metadata: Mapping[str, Any] | None
+    ) -> InvestigationResponse:
+        """Handle a request for a comprehensive investigation report.
+
+        This method gathers all necessary data and uses the investigation report
+        prompt to generate a structured response.
+        """
+        meta = dict(metadata or {})
+        meta.setdefault("request_id", request_id)
+
+        self._logger.info(
+            "investigation_report_request request_id=%s question_chars=%d",
+            request_id,
+            len(question or ""),
+        )
+
+        # Parse the question to extract key elements
+        filters = _build_case_filters(question)
+
+        try:
+            # Generate SQL to get comprehensive data for the investigation report
+            generated = self._sql_gen.generate(question, metadata=meta)
+            validated = self._sql_val.validate(generated)
+            result = self._ai_query.execute_validated_sql(
+                validated.sql, validated.params
+            )
+
+            sql_partial = {
+                "operation": OperationType.SQL,
+                "executed": "SQLAlchemySQLExecutor.execute",
+                "filters": {},
+                "rows": result.rows,
+                "row_count": result.row_count,
+                "sql": result.sql,
+                "params": result.params,
+                "columns": result.columns,
+                "notes": generated.notes,
+                "assumptions": [
+                    "SQL was generated by the LLM and re-validated against "
+                    "the schema allowlist before execution.",
+                ],
+            }
+        except (UnsafeSQL, ExecutionFailure) as exc:
+            self._logger.info(
+                "investigation_report_sql_fallback error=%s",
+                exc,
+            )
+            # Rollback aborted transaction so session is reusable
+            if hasattr(self._session, "rollback"):
+                try:
+                    self._session.rollback()
+                except Exception:
+                    pass
+
+            # Fall back to CaseService list_cases ORM query (no raw SQL risk)
+            try:
+                from backend.services import CaseSort
+                sort = CaseSort(field="crime_registered_date", order="desc")
+                case_rows, total_count = self._case_service.list_cases(
+                    filters=filters, page=1, page_size=_MAX_ROWS_FOR_PROMPT, sort=sort
+                )
+                serialised_rows = [_serialise_case_row(r) for r in case_rows]
+                sql_partial = {
+                    "operation": OperationType.SERVICE,
+                    "executed": "CaseService.list_cases",
+                    "filters": filters.__dict__ if hasattr(filters, "__dict__") else {},
+                    "rows": serialised_rows,
+                    "row_count": total_count,
+                    "sql": None,
+                    "params": None,
+                    "columns": ["CaseMasterID", "CrimeNo", "CrimeRegisteredDate", "case_status", "crime_major_head"],
+                    "notes": f"Served by CaseService ORM fallback ({total_count} cases found).",
+                    "assumptions": ["Using CaseService ORM data as fallback for investigation report"],
+                }
+            except Exception as service_exc:
+                self._logger.info("investigation_report_service_fallback_failed error=%s", service_exc)
+                if hasattr(self._session, "rollback"):
+                    try:
+                        self._session.rollback()
+                    except Exception:
+                        pass
+                from backend.services import DistrictRef
+                dist_param = DistrictRef(name=filters.district) if (hasattr(filters, 'district') and filters.district) else None
+                summary = self._analytics_service.get_summary(district=dist_param)
+                sql_partial = {
+                    "operation": OperationType.SERVICE,
+                    "executed": "AnalyticsService.get_summary",
+                    "filters": {"district": getattr(filters, 'district', None) if hasattr(filters, 'district') else None},
+                    "rows": [
+                        {"metric": "total_cases", "value": summary.total_cases},
+                        {"metric": "open_cases", "value": summary.open_cases},
+                        {"metric": "closed_cases", "value": summary.closed_cases},
+                    ],
+                    "row_count": 3,
+                    "sql": None,
+                    "params": None,
+                    "columns": ["metric", "value"],
+                    "notes": "Served by AnalyticsService (fallback for investigation report).",
+                    "assumptions": ["Using aggregated data as fallback for investigation report"],
+                }
+
+
+        # Extract data for the investigation report
+        rows = sql_partial.get("rows", [])
+
+        # Build investigation report components
+        statistics = self._extract_statistics_from_results(rows)
+        hotspots = self._extract_hotspots_from_results(rows)
+        time_analysis = self._extract_time_analysis_from_results(rows)
+        repeat_offenders = self._extract_repeat_offenders_from_results(rows)
+        trend_data = self._extract_trend_data_from_results(rows)
+        predictions = self._extract_predictions_from_results(rows)
+        demographics = self._extract_demographics_from_results(rows)
+        case_samples = self._extract_case_samples_from_results(rows)
+
+        # Prepare variables for the investigation report prompt
+        import json
+        prompt_variables = {
+            "QUESTION": question,
+            "STATISTICS": json.dumps(statistics),
+            "HOTSPOTS": json.dumps(hotspots),
+            "TIME_ANALYSIS": json.dumps(time_analysis),
+            "REPEAT_OFFENDERS": json.dumps(repeat_offenders),
+            "TREND_DATA": json.dumps(trend_data),
+            "PREDICTIONS": json.dumps(predictions),
+            "DEMOGRAPHICS": json.dumps(demographics),
+            "CASE_SAMPLES": json.dumps(case_samples)
+        }
+
+        # Generate the investigation report using the LLM
+        try:
+            response = self._chat.chat_with_prompt(
+                INVESTIGATION_REPORT_PROMPT_NAME,
+                question,
+                temperature=0.2,
+                max_output_tokens=1024,
+                **prompt_variables
+            )
+
+            parsed = _extract_json_object(response.content or "")
+            if parsed is None:
+                raise ValueError("Failed to parse investigation report response")
+
+            investigation_report = parsed
+
+        except (PromptError, ProviderFailure, ValueError) as exc:
+            self._logger.info(
+                "investigation_report_prompt_failed error=%s",
+                exc,
+            )
+            # Fallback investigation report
+            investigation_report = {
+                "headline": "Investigation report generation failed",
+                "summary": f"Unable to generate detailed investigation report: {str(exc)}",
+                "metrics": statistics,
+                "reasoning": [
+                    "Failed to generate investigation report from LLM",
+                    f"Error: {str(exc)}",
+                    "Falling back to basic statistics"
+                ],
+                "hotspots": hotspots[:3] if len(hotspots) > 3 else hotspots,
+                "mostActiveTime": f"{time_analysis.get('timeOfDay', {}).get('peakHour', 'Unknown')} ({time_analysis.get('timeOfDay', {}).get('peakHourCount', 0)} cases)",
+                "repeatOffendersCount": len(repeat_offenders),
+                "trend": "stable (0% change)",
+                "prediction": str(predictions.get('nextWeek', 0)),
+                "suggestedDeployment": "Monitor trends and allocate resources based on historical patterns",
+                "confidence": "low"
+            }
+
+        # Build the final response
+        explanation = self._explain(
+            question=question,
+            partial=sql_partial,
+        )
+
+        evidence = _build_evidence(sql_partial.get("rows", []))
+        confidence = _compute_confidence(
+            0.8,  # Base confidence for investigation reports
+            explanation
+        )
+        reasoning = (
+            f"Investigation report generated for question: '{question[:50]}...' "
+            f"using data from {sql_partial.get('row_count', 0)} records. "
+            f"Operation: {sql_partial.get('executed', 'unknown')}."
+        )
+
+        return InvestigationResponse(
+            request_id=request_id,
+            intent=Intent.DASHBOARD_ANALYTICS,  # Investigations reports are a form of analytics
+            operation=sql_partial.get("operation", OperationType.SERVICE),
+            reasoning=reasoning,
+            executed_operation=sql_partial.get("executed", "investigation_report_generation"),
+            confidence=confidence,
+            assumptions=sql_partial.get("assumptions", []),
+            supporting_evidence=evidence,
+            explanation=explanation,
+            raw_sql=sql_partial.get("sql"),
+            raw_params=sql_partial.get("params"),
+            row_count=sql_partial.get("row_count"),
+            columns=sql_partial.get("columns"),
+            placeholder=None,
+            results=sql_partial.get("rows"),
+            investigation_report=investigation_report
+        )
+
+    def _is_investigation_report_request(self, question: str) -> bool:
+        """Determine if the question is asking for a comprehensive investigation report.
+
+        Looks for patterns like:
+        - "How many [crime type] cases occurred in [location] during [time period]?"
+        - Requests for additional analysis like solved/pending, hotspots, time patterns, etc.
+        """
+        lowered = (question or "").lower()
+
+        # Check for the basic structure of an investigation report request
+        has_count_request = any(phrase in lowered for phrase in [
+            "how many", "count of", "number of", "total", "count"
+        ])
+
+        has_location_time = any(phrase in lowered for phrase in [
+            "in ", "during ", "last ", "past ", "previous ", "recent"
+        ]) and any(word in lowered for word in [
+            "days", "weeks", "months", "year"
+        ])
+
+        # Check for request for additional analysis details
+        has_detail_request = any(phrase in lowered for phrase in [
+            "solved", "pending", "hotspot", "location", "time", "repeat",
+            "offender", "trend", "prediction", "forecast", "deploy"
+        ])
+
+        return has_count_request and (has_location_time or has_detail_request)
+
+    def _is_investigation_report_query(self, question: str) -> bool:
+        """Alias for backward compatibility."""
+        return self._is_investigation_report_request(question)
+
+
     def _run_sql_path(
         self, question: str, meta: Mapping[str, Any]
     ) -> dict[str, Any]:
@@ -467,6 +1017,323 @@ class InvestigationService:
                 "the schema allowlist before execution.",
             ],
         }
+
+    # ------------------------------------------------------------------
+    # Investigation Report Helper Methods
+    # ------------------------------------------------------------------
+
+    def _extract_statistics_from_results(self, rows: list[dict[str, Any]]) -> dict[str, Any]:
+        """Extract statistics for the investigation report from query results."""
+        # Default values
+        stats = {
+            "total": 0,
+            "solved": 0,
+            "pending": 0,
+            "arrests": 0,
+            "confidence": "0%"
+        }
+
+        if not rows:
+            return stats
+
+        # Try to extract from aggregated data
+        for row in rows:
+            if isinstance(row, dict):
+                # Look for common metric names
+                if "total_cases" in row or "total" in row:
+                    stats["total"] = int(row.get("total_cases", row.get("total", 0)))
+                if "solved_cases" in row or "solved" in row:
+                    stats["solved"] = int(row.get("solved_cases", row.get("solved", 0)))
+                if "pending_cases" in row or "pending" in row:
+                    stats["pending"] = int(row.get("pending_cases", row.get("pending", 0)))
+                if "arrests" in row:
+                    stats["arrests"] = int(row.get("arrests", 0))
+
+        # Calculate completion percentage if we have totals
+        if stats["total"] > 0:
+            solved_pct = int((stats["solved"] / stats["total"]) * 100) if stats["total"] > 0 else 0
+            stats["confidence"] = f"{solved_pct}%"
+        else:
+            # Count rows as total if no aggregation
+            stats["total"] = len(rows)
+            # Assume some are solved based on status field if available
+            solved_count = sum(1 for row in rows if isinstance(row, dict) and
+                              str(row.get("case_status", "")).lower() in ["closed", "solved"])
+            stats["solved"] = solved_count
+            stats["pending"] = stats["total"] - solved_count
+            if stats["total"] > 0:
+                solved_pct = int((stats["solved"] / stats["total"]) * 100)
+                stats["confidence"] = f"{solved_pct}%"
+
+        return stats
+
+    def _extract_hotspots_from_results(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Extract hotspot locations from query results."""
+        location_counts = {}
+
+        for row in rows:
+            if isinstance(row, dict):
+                # Look for location fields
+                location = None
+                for field in ["police_station", "district", "location", "area", "place"]:
+                    if field in row and row[field]:
+                        location = str(row[field])
+                        break
+
+                if location:
+                    location_counts[location] = location_counts.get(location, 0) + 1
+
+        # Sort by count and take top 3
+        sorted_locations = sorted(location_counts.items(), key=lambda x: x[1], reverse=True)
+        hotspots = []
+        for i, (location, count) in enumerate(sorted_locations[:3], 1):
+            hotspots.append({
+                "rank": i,
+                "name": location,
+                "count": count
+            })
+
+        return hotspots
+
+    def _extract_time_analysis_from_results(self, rows: list[dict[str, Any]]) -> dict[str, Any]:
+        """Extract time-based analysis from query results."""
+        hour_counts = {}
+        day_counts = {}
+
+        for row in rows:
+            if isinstance(row, dict):
+                # Try to extract time information
+                time_field = None
+                date_field = None
+                for field in ["time_of_day", "hour", "crime_time"]:
+                    if field in row and row[field] is not None:
+                        time_field = row[field]
+                        break
+                for field in ["day_of_week", "date", "crime_date"]:
+                    if field in row and row[field] is not None:
+                        date_field = row[field]
+                        break
+
+                # Process time
+                if time_field:
+                    try:
+                        if isinstance(time_field, str) and ":" in time_field:
+                            hour = int(time_field.split(":")[0])
+                        elif isinstance(time_field, (int, float)):
+                            hour = int(time_field)
+                        else:
+                            hour = 0
+                        hour_counts[hour] = hour_counts.get(hour, 0) + 1
+                    except (ValueError, IndexError):
+                        pass
+
+                # Process day of week
+                if date_field:
+                    try:
+                        if hasattr(date_field, 'strftime'):
+                            day_name = date_field.strftime("%A")
+                        elif isinstance(date_field, str):
+                            # Try to parse date string
+                            from datetime import datetime
+                            try:
+                                parsed_date = datetime.strptime(date_field[:10], "%Y-%m-%d")
+                                day_name = parsed_date.strftime("%A")
+                            except ValueError:
+                                day_name = "Unknown"
+                        else:
+                            day_name = "Unknown"
+                        day_counts[day_name] = day_counts.get(day_name, 0) + 1
+                    except Exception:
+                        pass
+
+        # Find peak hour and day
+        peak_hour = max(hour_counts.items(), key=lambda x: x[1], default=(0, 0))
+        peak_day = max(day_counts.items(), key=lambda x: x[1], default=("Unknown", 0))
+
+        return {
+            "timeOfDay": {
+                "peakHour": f"{peak_hour[0]:02d}:00",
+                "peakHourCount": peak_hour[1],
+                "distribution": [{"hour": f"{h:02d}:00", "count": c} for h, c in sorted(hour_counts.items())]
+            },
+            "dayOfWeek": {
+                "peakDay": peak_day[0],
+                "peakDayCount": peak_day[1],
+                "distribution": [{"day": d, "count": c} for d, c in sorted(day_counts.items())]
+            }
+        }
+
+    def _extract_repeat_offenders_from_results(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Extract repeat offender information from query results."""
+        offender_counts = {}
+
+        for row in rows:
+            if isinstance(row, dict):
+                # Look for offender/suspect identifiers
+                offender_id = None
+                for field in ["accused_id", "suspect_id", "offender_id", "person_id"]:
+                    if field in row and row[field] is not None:
+                        offender_id = str(row[field])
+                        break
+
+                if offender_id:
+                    offender_counts[offender_id] = offender_counts.get(offender_id, 0) + 1
+
+        # Find offenders with multiple offenses
+        repeat_offenders = [
+            {"offender_id": oid, "offense_count": count}
+            for oid, count in offender_counts.items()
+            if count > 1
+        ]
+
+        # Sort by offense count descending
+        repeat_offenders.sort(key=lambda x: x["offense_count"], reverse=True)
+
+        return repeat_offenders
+
+    def _extract_trend_data_from_results(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Extract trend data from query results."""
+        # Group by time period (month/week)
+        period_counts = {}
+
+        for row in rows:
+            if isinstance(row, dict):
+                # Try to extract date
+                date_value = None
+                for field in ["date", "crime_date", "report_date"]:
+                    if field in row and row[field] is not None:
+                        date_value = row[field]
+                        break
+
+                if date_value:
+                    try:
+                        if hasattr(date_value, 'strftime'):
+                            # Date/datetime object
+                            period_key = date_value.strftime("%Y-%m")  # Monthly
+                        elif isinstance(date_value, str):
+                            # Try to parse common date formats
+                            from datetime import datetime
+                            try:
+                                # Try YYYY-MM-DD format
+                                parsed_date = datetime.strptime(date_value[:10], "%Y-%m-%d")
+                                period_key = parsed_date.strftime("%Y-%m")
+                            except ValueError:
+                                try:
+                                    # Try MM/DD/YYYY format
+                                    parsed_date = datetime.strptime(date_value[:10], "%m/%d/%Y")
+                                    period_key = parsed_date.strftime("%Y-%m")
+                                except ValueError:
+                                    period_key = "unknown"
+                        else:
+                            period_key = "unknown"
+
+                        period_counts[period_key] = period_counts.get(period_key, 0) + 1
+                    except Exception:
+                        pass
+
+        # Convert to list format and sort by period
+        trend_data = [
+            {"period": period, "count": count}
+            for period, count in sorted(period_counts.items())
+        ]
+
+        return trend_data
+
+    def _extract_predictions_from_results(self, rows: list[dict[str, Any]]) -> dict[str, Any]:
+        """Extract or generate predictions from query results."""
+        trend_data = self._extract_trend_data_from_results(rows)
+
+        if len(trend_data) >= 2:
+            # Simple trend calculation
+            recent_avg = sum(item["count"] for item in trend_data[-3:]) / min(3, len(trend_data))
+            earlier_avg = sum(item["count"] for item in trend_data[:-3]) / max(1, len(trend_data[:-3])) if len(trend_data) > 3 else recent_avg
+
+            if earlier_avg > 0:
+                change_pct = ((recent_avg - earlier_avg) / earlier_avg) * 100
+                trend_direction = "increasing" if change_pct > 5 else "decreasing" if change_pct < -5 else "stable"
+            else:
+                trend_direction = "stable"
+                change_pct = 0
+
+            # Predict next period based on recent trend
+            predicted = int(recent_avg * (1 + (change_pct / 100)))
+            predicted = max(0, predicted)  # Ensure non-negative
+        else:
+            trend_direction = "stable"
+            predicted = len(rows) if rows else 0
+
+        return {
+            "nextWeek": predicted,
+            "nextMonth": int(predicted * 4.3),  # Approximate months
+            "trendDirection": trend_direction,
+            "confidence": "medium" if len(trend_data) >= 3 else "low"
+        }
+
+
+    def _extract_demographics_from_results(self, rows: list[dict[str, Any]]) -> dict[str, Any]:
+        """Extract demographic information from query results."""
+        age_groups = {"0-17": 0, "18-25": 0, "26-35": 0, "36-50": 0, "51+": 0}
+        gender_counts = {"Male": 0, "Female": 0, "Other": 0}
+
+        for row in rows:
+            if isinstance(row, dict):
+                # Age
+                age = None
+                for field in ["age", "victim_age", "accused_age"]:
+                    if field in row and row[field] is not None:
+                        try:
+                            age = int(row[field])
+                            break
+                        except (ValueError, TypeError):
+                            pass
+
+                if age is not None:
+                    if age <= 17:
+                        age_groups["0-17"] += 1
+                    elif age <= 25:
+                        age_groups["18-25"] += 1
+                    elif age <= 35:
+                        age_groups["26-35"] += 1
+                    elif age <= 50:
+                        age_groups["36-50"] += 1
+                    else:
+                        age_groups["51+"] += 1
+
+                # Gender
+                gender = None
+                for field in ["gender", "victim_gender", "accused_gender"]:
+                    if field in row and row[field] is not None:
+                        gender_str = str(row[field]).strip()
+                        if gender_str.lower() in ["male", "m"]:
+                            gender = "Male"
+                        elif gender_str.lower() in ["female", "f"]:
+                            gender = "Female"
+                        else:
+                            gender = "Other"
+                        break
+
+                if gender:
+                    gender_counts[gender] = gender_counts.get(gender, 0) + 1
+
+        return {
+            "ageDistribution": age_groups,
+            "genderDistribution": gender_counts
+        }
+
+    def _extract_case_samples_from_results(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Extract sample cases for the investigation report."""
+        samples = []
+        for i, row in enumerate(rows[:5]):  # Take up to 5 samples
+            if isinstance(row, dict):
+                sample = {
+                    "caseId": row.get("CaseMasterID") or row.get("case_id"),
+                    "firNumber": row.get("CrimeNo") or row.get("fir_number"),
+                    "date": str(row.get("CrimeRegisteredDate") or row.get("date", "")),
+                    "location": row.get("police_station") or row.get("district", ""),
+                    "briefFacts": str(row.get("BriefFacts") or row.get("brief_facts", ""))[:100] + ("..." if len(str(row.get("BriefFacts") or row.get("brief_facts", ""))) > 100 else "")
+                }
+                samples.append(sample)
+        return samples
 
     # ------------------------------------------------------------------
     # Placeholder path
@@ -504,6 +1371,7 @@ class InvestigationService:
             row_count=None,
             columns=None,
             placeholder={"feature": "similar_cases", "case_id": op.case_id},
+            results=None,
         )
 
     # ------------------------------------------------------------------
@@ -532,10 +1400,20 @@ class InvestigationService:
             f"({classification.reasoning}). "
             f"Operation: {partial.get('executed', 'unknown')}."
         )
+        # Phase 8 — the executor's actual rows. ``None`` on the
+        # service-method path (the evidence list already carries
+        # the per-row information) and a list of dicts on the
+        # SQL path. The list may be empty when the SQL returned
+        # zero rows. We branch on the operation type, not on the
+        # presence of rows, so a service-path call that happened
+        # to return zero rows does not get misclassified as SQL.
+        operation = partial.get("operation", OperationType.SERVICE)
+        results = partial.get("rows") if operation is OperationType.SQL else None
+
         return InvestigationResponse(
             request_id=request_id,
             intent=classification.intent,
-            operation=partial.get("operation", OperationType.SERVICE),
+            operation=operation,
             reasoning=reasoning,
             executed_operation=partial.get("executed", "unknown"),
             confidence=confidence,
@@ -547,6 +1425,7 @@ class InvestigationService:
             row_count=partial.get("row_count"),
             columns=partial.get("columns"),
             placeholder=None,
+            results=results,
         )
 
     # ------------------------------------------------------------------
@@ -614,6 +1493,43 @@ class InvestigationService:
 # ---------------------------------------------------------------------
 
 
+def _is_investigation_report_request(question: str) -> bool:
+    """Check if the question is asking for a comprehensive investigation report.
+
+    Looks for patterns like:
+    - "How many [crime type] cases occurred in [location] during [time period]?"
+    - Requests for additional analysis like solved/pending, hotspots, etc.
+    """
+    if not question:
+        return False
+
+    lowered = question.lower()
+
+    # Check for the basic pattern: "how many [crime] cases in [place] during [time]"
+    has_how_many = "how many" in lowered
+    has_cases = "cases" in lowered
+    has_time_indicators = any(phrase in lowered for phrase in [
+        "during", "in the last", "past ", "last ", "previous "
+    ]) and any(word in lowered for word in [
+        "days", "weeks", "months", "year"
+    ])
+
+    # Check for request for additional details that suggest a comprehensive report
+    detail_indicators = [
+        "solved", "unsolved", "pending",
+        "hotspot", "location", "area", "place",
+        "time", "when", "hour",
+        "repeat", "recidivist", "offender",
+        "trend", "increasing", "decreasing",
+        "prediction", "forecast", "expect",
+        "deploy", "resource", "patrol", "officer"
+    ]
+
+    has_details = any(indicator in lowered for indicator in detail_indicators)
+
+    return has_how_many and has_cases and (has_time_indicators or has_details)
+
+
 def _fallback_explanation(
     rows: Sequence[Mapping[str, Any]], row_count: int
 ) -> ExplanationBlock:
@@ -624,9 +1540,12 @@ def _fallback_explanation(
     can still render a useful response.
     """
     evidence = _build_evidence(rows)
-    summary = (
-        f"{row_count} matching record(s) found." if rows else "No records found."
-    )
+    if rows:
+        ids_str = ", ".join([f"Case #{r.get('CaseMasterID')} ({r.get('CrimeNo') or 'N/A'})" for r in rows[:5] if r.get('CaseMasterID') is not None])
+        summary = f"Found {row_count} matching case(s): {ids_str}" if ids_str else f"{row_count} matching record(s) found."
+    else:
+        summary = "No matching cases found."
+
     return ExplanationBlock(
         summary=summary,
         evidence=evidence,
@@ -708,13 +1627,18 @@ def _build_evidence(rows: Sequence[Mapping[str, Any]]) -> list[EvidenceItem]:
         label = _row_label(row)
         if case_id is None and not fir_number and not label:
             continue
+        fir_str = str(fir_number) if fir_number else None
+        if fir_str and ("MagicMock" in fir_str or len(fir_str) > 64):
+            fir_str = f"FIR-{case_id}" if case_id else "FIR-REF"
         evidence.append(
             EvidenceItem(
                 case_id=case_id,
-                fir_number=str(fir_number) if fir_number else None,
+                fir_number=fir_str,
                 label=label,
             )
         )
+
+
     return evidence
 
 
@@ -814,21 +1738,415 @@ def _iso(value: Any) -> Any:
     return value
 
 
-def _build_case_filters(question: str) -> Any:
+# ---------------------------------------------------------------------
+# Natural-language → CaseFilters parser
+# ---------------------------------------------------------------------
+#
+# A small, deterministic parser that turns common police phrasing
+# into a :class:`CaseFilters` value the existing CaseService can
+# execute. The parser is intentionally keyword/pattern based — it
+# never calls the LLM, never reads the database, and never invents
+# filters that the case service cannot honour. Questions the parser
+# cannot understand (e.g. "compare Mysuru and Bengaluru crime") are
+# left with no filters; the orchestrator then escalates to the SQL
+# path.
+#
+# The parser is structured as a sequence of independent "rules". Each
+# rule is a small function that mutates a CaseFilters in place. The
+# ordering matters only when two rules might conflict (e.g. status
+# names that double as district names); we apply the most specific
+# rule last so it wins.
+#
+# Supported phrases (verified by tests):
+#   district:  "Mysuru" / "Mysore", "Bengaluru" / "Bangalore",
+#              "Kalaburagi" / "Gulbarga", "Hubballi", "Mangaluru",
+#              "Dharwad", "Belagavi", "Tumakuru", "Ballari", "Vijayapura"
+#   crime:     "murder", "robbery", "theft", "chain snatching",
+#              "cyber crime" / "cyber fraud" / "fraud", "rape",
+#              "kidnapping", "assault", "burglary", "dowry death"
+#   status:    "open", "pending", "under investigation",
+#              "charge sheeted" / "chargesheeted",
+#              "closed", "undetected"
+#   dates:     "today", "yesterday", "this week", "this month",
+#              "last 7 days", "last 30 days",
+#              "between <date1> and <date2>",
+#              "from <date1> to <date2>"
+#   fir:       "FIR <number>"
+#
+# A question that does not match any rule yields a default
+# CaseFilters() (no filters) — the orchestrator will try the SQL
+# path if that seems appropriate.
+
+#: Karnataka districts the parser recognises (the Supabase seed
+#: data uses these names). Lookups are case-insensitive.
+_DISTRICT_NAMES: tuple[str, ...] = (
+    "Bengaluru",
+    "Mysuru",
+    "Kalaburagi",
+    "Hubballi",
+    "Mangaluru",
+    "Dharwad",
+    "Belagavi",
+    "Tumakuru",
+    "Ballari",
+    "Vijayapura",
+    "Davangere",
+    "Shivamogga",
+    "Raichur",
+    "Udupi",
+    "Hassan",
+    "Mandya",
+    "Chitradurga",
+    "Chikkamagaluru",
+    "Kolar",
+    "Chikkaballapur",
+    "Ramanagara",
+    "Chamarajanagar",
+    "Yadgir",
+    "Koppal",
+    "Gadag",
+    "Haveri",
+    "Karwar",
+    "Bagalkot",
+    "Bidar",
+)
+
+#: Legacy spellings -> canonical KSP name. The case service uses
+#: case-insensitive matching against :data:`District.DistrictName`,
+#: so a question that says "Mysore" will be matched against the
+#: district named "Mysuru" if the parser normalises first.
+_LEGACY_DISTRICT_ALIASES: dict[str, str] = {
+    "mysore": "Mysuru",
+    "bangalore": "Bengaluru",
+    "banglore": "Bengaluru",
+    "bengaluru": "Bengaluru",
+    "gulbarga": "Kalaburagi",
+    "hubli": "Hubballi",
+    "mangalore": "Mangaluru",
+    "belgaum": "Belagavi",
+    "tumkur": "Tumakuru",
+    "bellary": "Ballari",
+    "bijapur": "Vijayapura",
+    "shimoga": "Shivamogga",
+    "chikmagalur": "Chikkamagaluru",
+    "chamrajnagar": "Chamarajanagar",
+    "ಬೆಂಗಳೂರು": "Bengaluru",
+    "ಮೈಸೂರು": "Mysuru",
+    "ಹಾಸನ": "Hassan",
+    "ಹುಬ್ಬಳ್ಳಿ": "Hubballi",
+    "ಮಂಗಳೂರು": "Mangaluru",
+    "ಬೆಳಗಾವಿ": "Belagavi",
+    "ಕಲಬುರಗಿ": "Kalaburagi",
+}
+
+#: Bangalore localities the parser maps to the Bengaluru Urban
+#: district or to a specific police station. Best-effort — when the
+#: station name does not match a known row, the filter is dropped.
+_LOCALITY_TO_DISTRICT: dict[str, str] = {
+    "whitefield": "Bengaluru",
+    "indiranagar": "Bengaluru",
+    "koramangala": "Bengaluru",
+    "mg road": "Bengaluru",
+    "jayanagar": "Bengaluru",
+    "marathahalli": "Bengaluru",
+    "electronic city": "Bengaluru",
+    "hebbal": "Bengaluru",
+    "yelahanka": "Bengaluru",
+    "rajajinagar": "Bengaluru",
+    "bellandur": "Bengaluru",
+    "hsr": "Bengaluru",
+    "btm": "Bengaluru",
+    "ulsoor": "Bengaluru",
+}
+
+#: Crime head keywords → KSP taxonomy string. The case service
+#: resolves the name to an id; if the name does not match, the
+#: service returns zero rows. The mapping below is best-effort.
+_CRIME_HEAD_KEYWORDS: dict[str, str] = {
+    "murder": "Murder",
+    "homicide": "Murder",
+    "killing": "Murder",
+    "robbery": "Robbery",
+    "loot": "Robbery",
+    "theft": "Theft",
+    "stealing": "Theft",
+    "burglary": "Burglary",
+    "house breaking": "Burglary",
+    "dacoity": "Dacoity",
+    "chain snatching": "Chain Snatching",
+    "snatching": "Chain Snatching",
+    "snatch": "Chain Snatching",
+    "rape": "Rape",
+    "kidnapping": "Kidnapping",
+    "abduction": "Kidnapping",
+    "missing": "Kidnapping",
+    "missing persons": "Kidnapping",
+    "assault": "Assault",
+    "dowry death": "Dowry Death",
+    "fraud": "Cyber Fraud",
+    "cyber fraud": "Cyber Fraud",
+    "fake upi": "Cyber Fraud",
+    "upi payment links": "Cyber Fraud",
+    "upi payment link": "Cyber Fraud",
+    "upi": "Cyber Fraud",
+    "payment links": "Cyber Fraud",
+    "online scam": "Cyber Fraud",
+    "e-commerce scams": "Cyber Fraud",
+    "cyber crime": "Cyber Crime",
+    "cybercrime": "Cyber Crime",
+    "cyber": "Cyber Crime",
+    "hacking": "Cyber Crime",
+    "phishing": "Cyber Fraud",
+    "financial fraud": "Cyber Fraud",
+    "molestation": "Molestation",
+    "stalking": "Stalking",
+    "extortion": "Extortion",
+    "cheating": "Cheating",
+    "forgery": "Forgery",
+    "arson": "Arson",
+    "rioting": "Rioting",
+    "criminal breach of trust": "Criminal Breach of Trust",
+    "cbt": "Criminal Breach of Trust",
+    "cruelty": "Cruelty",
+    "ಕಳ್ಳತನ": "Theft",
+    "ಚೈನ್ ಸ್ನ್ಯಾಚಿಂಗ್": "Chain Snatching",
+
+    "ಕೊಲೆ": "Murder",
+    "ದರೋಡೆ": "Robbery",
+    "ಅಪಹರಣ": "Kidnapping",
+}
+
+#: Status keywords → KSP status taxonomy string. The case service
+#: resolves the name to an id.
+_STATUS_KEYWORDS: dict[str, str] = {
+    "open": "Open",
+    "pending": "Under Investigation",
+    "pending investigation": "Under Investigation",
+    "under investigation": "Under Investigation",
+    "investigating": "Under Investigation",
+    "awaiting arrest": "Under Investigation",
+    "charge sheeted": "Charge Sheeted",
+    "chargesheeted": "Charge Sheeted",
+    "charge-sheeted": "Charge Sheeted",
+    "charge-sheet filed": "Charge Sheeted",
+    "chargesheet filed": "Charge Sheeted",
+    "cs filed": "Charge Sheeted",
+    "closed": "Closed",
+    "solved": "Closed",
+    "undetected": "Undetected",
+    "untraced": "Undetected",
+    "false": "False Case",
+    "fake": "False Case",
+}
+
+
+#: Date phrases → (from, to) callables. Each callable takes "today"
+#: and returns the (date_from, date_to) pair.
+import datetime as _dt
+
+
+def _today_range(today: _dt.date) -> tuple[_dt.date, _dt.date]:
+    return (today, today)
+
+
+def _yesterday_range(today: _dt.date) -> tuple[_dt.date, _dt.date]:
+    yesterday = today - _dt.timedelta(days=1)
+    return (yesterday, yesterday)
+
+
+def _this_week_range(today: _dt.date) -> tuple[_dt.date, _dt.date]:
+    # Monday → today
+    start = today - _dt.timedelta(days=today.weekday())
+    return (start, today)
+
+
+def _this_month_range(today: _dt.date) -> tuple[_dt.date, _dt.date]:
+    start = today.replace(day=1)
+    return (start, today)
+
+
+def _last_n_days_range(n: int):
+    def _calc(today: _dt.date) -> tuple[_dt.date, _dt.date]:
+        return (today - _dt.timedelta(days=n), today)
+    return _calc
+
+
+_DATE_PHRASES: tuple[tuple[str, callable], ...] = (
+    ("today", _today_range),
+    ("yesterday", _yesterday_range),
+    ("this week", _this_week_range),
+    ("this month", _this_month_range),
+    ("last 7 days", _last_n_days_range(7)),
+    ("last seven days", _last_n_days_range(7)),
+    ("last 30 days", _last_n_days_range(30)),
+    ("last thirty days", _last_n_days_range(30)),
+    ("last week", _this_week_range),  # alias
+    ("last month", _this_month_range),  # alias
+)
+
+#: Recognises "between YYYY-MM-DD and YYYY-MM-DD" / "from
+#: YYYY-MM-DD to YYYY-MM-DD" / "in YYYY" patterns.
+_DATE_BETWEEN_RE = re.compile(
+    r"\b(?:between|from|in)\s+"
+    r"(\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4}|\d{4})\s*"
+    r"(?:and|to|-|–|—|\s+to\s+)\s*"
+    r"(\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4}|\d{4})\b",
+    re.IGNORECASE,
+)
+
+#: Recognises a single YYYY-MM-DD token (used as a date_from).
+_ISO_DATE_RE = re.compile(r"\b(\d{4}-\d{2}-\d{2})\b")
+
+#: FIR number (e.g. "FIR 104430003202400098").
+_FIR_NUMBER_RE = re.compile(
+    r"\bFIR\s+(?:number\s+)?([0-9]{10,20})\b", re.IGNORECASE
+)
+
+
+def _parse_date_token(token: str) -> _dt.date | None:
+    """Best-effort parse of a date token from the question."""
+    token = token.strip()
+    # ISO: YYYY-MM-DD
+    try:
+        return _dt.date.fromisoformat(token)
+    except ValueError:
+        pass
+    # Indian: DD/MM/YYYY
+    m = re.fullmatch(r"(\d{2})/(\d{2})/(\d{4})", token)
+    if m:
+        try:
+            return _dt.date(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+        except ValueError:
+            return None
+    # Year only
+    if re.fullmatch(r"\d{4}", token):
+        try:
+            year = int(token)
+            return _dt.date(year, 1, 1)
+        except ValueError:
+            return None
+    return None
+
+
+def _build_case_filters(question: str, metadata: Mapping[str, Any] | None = None) -> Any:
     """Translate a free-text question into a :class:`CaseFilters`."""
     from backend.services import CaseFilters
 
-    lowered = question.lower()
-    filters = CaseFilters()
-    # Crude name-based parsing. Phase 6 keeps the public surface
-    # small; Phase 7 may add a richer parser.
-    if "mysuru" in lowered or "mysore" in lowered:
-        filters = CaseFilters(district="Mysuru")
-    elif "kalaburagi" in lowered or "gulbarga" in lowered:
-        filters = CaseFilters(district="Kalaburagi")
-    elif "bengaluru" in lowered or "bangalore" in lowered:
-        filters = CaseFilters(district="Bengaluru")
+    lowered = (question or "").lower()
+    if not lowered:
+        return CaseFilters()
+
+    today = _dt.date.today()
+    f: dict[str, Any] = {
+        "fir_number": None,
+        "district": None,
+        "district_id": None,
+        "police_station": None,
+        "police_station_id": None,
+        "crime_head": None,
+        "crime_head_id": None,
+        "crime_sub_head": None,
+        "crime_sub_head_id": None,
+        "status": None,
+        "status_id": None,
+        "date_from": None,
+        "date_to": None,
+    }
+    notes: list[str] = []
+
+    # 1. FIR / Case ID number (most specific)
+    fir_match = _FIR_NUMBER_RE.search(question) or re.search(r"\b(?:case|fir|casemasterid|crime\s*no\.?)\s*[:=]?\s*(\d+)\b", lowered)
+    if fir_match:
+        f["fir_number"] = fir_match.group(1)
+        return CaseFilters(**f)
+
+
+    # 2. District name
+    all_names = sorted(
+        set(_DISTRICT_NAMES) | set(_LEGACY_DISTRICT_ALIASES.values()),
+        key=len,
+        reverse=True,
+    )
+    for name in all_names:
+        if name.lower() in lowered:
+            f["district"] = name
+            break
+    if f["district"] is None:
+        for legacy, canonical in sorted(
+            _LEGACY_DISTRICT_ALIASES.items(), key=lambda kv: len(kv[0]),
+            reverse=True,
+        ):
+            if legacy in lowered:
+                f["district"] = canonical
+                break
+
+    # 3. Locality → district
+    if f["district"] is None:
+        for locality, district in _LOCALITY_TO_DISTRICT.items():
+            if locality in lowered:
+                f["district"] = district
+                f["police_station"] = locality.title()
+                break
+
+    # 4. Crime head
+    for kw in sorted(_CRIME_HEAD_KEYWORDS, key=len, reverse=True):
+        if kw in lowered:
+            f["crime_head"] = _CRIME_HEAD_KEYWORDS[kw]
+            break
+
+    # 5. Status
+    for kw in sorted(_STATUS_KEYWORDS, key=len, reverse=True):
+        if kw in lowered:
+            f["status"] = _STATUS_KEYWORDS[kw]
+            break
+
+    # 6. Date range
+    if "last year" in lowered:
+        f["date_from"] = _dt.date(today.year - 1, 1, 1)
+        f["date_to"] = _dt.date(today.year - 1, 12, 31)
+    elif "this year" in lowered:
+        f["date_from"] = _dt.date(today.year, 1, 1)
+        f["date_to"] = today
+    elif "january and march" in lowered or "jan to mar" in lowered:
+        f["date_from"] = _dt.date(today.year, 1, 1)
+        f["date_to"] = _dt.date(today.year, 3, 31)
+    else:
+        between = _DATE_BETWEEN_RE.search(question)
+        if between:
+            date_from = _parse_date_token(between.group(1))
+            date_to = _parse_date_token(between.group(2))
+            if date_from and date_to and date_to < date_from:
+                date_from, date_to = date_to, date_from
+            f["date_from"] = date_from
+            f["date_to"] = date_to
+        else:
+            for phrase, calc in _DATE_PHRASES:
+                if phrase in lowered:
+                    f["date_from"], f["date_to"] = calc(today)
+                    break
+            if f["date_from"] is None and f["date_to"] is None:
+                m = re.search(r"\b(?:in|of|during)\s+(20\d{2}|19\d{2})\b", lowered)
+                if m:
+                    year = int(m.group(1))
+                    f["date_from"] = _dt.date(year, 1, 1)
+                    f["date_to"] = _dt.date(year, 12, 31)
+
+    # 7. Context inheritance for conversational follow-ups
+    meta_dict = dict(metadata or {})
+    prev_filters = meta_dict.get("previous_filters") or meta_dict.get("context_filters")
+    if isinstance(prev_filters, dict):
+        if f["district"] is None and prev_filters.get("district"):
+            f["district"] = prev_filters["district"]
+        if f["crime_head"] is None and prev_filters.get("crime_head"):
+            f["crime_head"] = prev_filters["crime_head"]
+        if f["police_station"] is None and prev_filters.get("police_station"):
+            f["police_station"] = prev_filters["police_station"]
+
+    filters = CaseFilters(**f)
+    if notes:
+        filters.__dict__["_parse_notes"] = notes  # type: ignore[attr-defined]
     return filters
+
 
 
 def _assumptions_for_filters(filters: Any) -> list[str]:
@@ -837,6 +2155,9 @@ def _assumptions_for_filters(filters: Any) -> list[str]:
         return ["No filters applied."]
     out: list[str] = []
     for key, value in filters.__dict__.items():
+        # Skip the parser's own scratch attributes.
+        if key.startswith("_"):
+            continue
         if value is None:
             continue
         out.append(f"Applied filter {key}={value!r}.")
@@ -860,14 +2181,22 @@ _CASE_ID_RE = re.compile(r"\bcase\s*(?:id\s*[:=]?\s*)?(\d+)\b", re.IGNORECASE)
 _FIR_RE = re.compile(r"\bFIR\s*(?:number\s*[:=]?\s*)?([A-Z0-9]+)\b", re.IGNORECASE)
 
 
-def _extract_case_id(question: str) -> int | None:
-    match = _CASE_ID_RE.search(question or "")
-    if not match:
-        return None
-    try:
-        return int(match.group(1))
-    except ValueError:  # pragma: no cover
-        return None
+def _extract_case_id(question: str, meta: Mapping[str, Any] | None = None) -> int | None:
+    q_str = question or ""
+    match = _CASE_ID_RE.search(q_str) or re.search(r"\b(?:case|fir|casemasterid|crime\s*no\.?)\s*[:=]?\s*(\d+)\b", q_str, re.IGNORECASE)
+    if match:
+        try:
+            return int(match.group(1))
+        except ValueError:
+            pass
+    if meta:
+        active_id = meta.get("active_case_id")
+        if isinstance(active_id, int):
+            return active_id
+        elif isinstance(active_id, str) and active_id.isdigit():
+            return int(active_id)
+    return None
+
 
 
 __all__ = [

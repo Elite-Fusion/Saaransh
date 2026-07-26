@@ -23,6 +23,16 @@ alembic==1.14.0
 # ---- Utilities ----
 python-dotenv==1.0.1
 
+# =============================================================
+# Phase 10: Authentication & Authorization
+# =============================================================
+
+# ---- JWT + password hashing ----
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
+email-validator==2.2.0
+
 # ---- Testing ----
 pytest==8.3.4
 
@@ -30,8 +40,25 @@ pytest==8.3.4
 # Phase 5: AI Foundation (provider-independent)
 # =============================================================
 
-# ---- LLM SDK (Gemini only today; others added in later phases) ----
+# ---- LLM SDK (Gemini & OpenAI-compatible providers) ----
 google-genai==1.0.0
+openai>=1.50.0
+
 
 # ---- Resilience ----
 tenacity>=9.0.0,<10.0.0
+
+# =============================================================
+# Phase 9: Predictive Intelligence (ML)
+# =============================================================
+
+# ---- Numerical + data primitives ----
+numpy>=2.0.0,<3.0.0
+pandas>=2.2.0,<3.0.0
+
+# ---- scikit-learn: lightweight ML (Random Forest, Gradient
+# Boosting, KMeans, TF-IDF, cosine, train/test split, metrics) ----
+scikit-learn>=1.5.0,<2.0.0
+
+# ---- Model persistence ----
+joblib>=1.3.0,<2.0.0

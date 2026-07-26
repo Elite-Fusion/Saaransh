@@ -322,9 +322,9 @@ class TestAIQueryService:
     def test_facade_schema_summary_contains_tables(self, session):
         service = AIQueryService(session)
         summary = service.get_schema_summary()
-        assert "CaseMaster" in summary
-        assert "Accused" in summary
-        assert "CaseMasterID" in summary
+        assert "casemaster" in summary
+        assert "accused" in summary
+        assert "casemasterid" in summary
 
     def test_facade_accepts_custom_executor(self, session):
         custom = MagicMock(spec=SQLExecutor)

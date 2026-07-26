@@ -1,0 +1,76 @@
+# =============================================================
+# Saaransh AI — Docker Compose (Development)
+# Run: docker-compose up
+# =============================================================
+
+services:
+  # ---- Backend API ----
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production
+    container_name: saaransh-backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - LOG_FORMAT=text
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - saaransh-net
+
+  # ---- Frontend ----
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: production
+    container_name: saaransh-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - saaransh-net
+
+  # ---- PostgreSQL ----
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: saaransh-postgres
+    environment:
+      POSTGRES_DB: saaransh
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - saaransh-net
+
+volumes:
+  postgres_data:
+
+networks:
+  saaransh-net:
+    driver: bridge

@@ -29,13 +29,20 @@ from backend.services.analytics_service import (
     MonthlyTrend,
     SummaryCounts,
 )
+from backend.services.auth_service import AuthError, AuthService, ForbiddenError, hash_password, verify_password
 from backend.services.base import BaseService
+from backend.services.notification_service import NotificationService
+from backend.services.presence_service import PresenceService
 from backend.services.case_service import (
     ALLOWED_SORT_FIELDS,
     CaseFilters,
     CaseNotFoundError,
     CaseService,
     CaseSort,
+)
+from backend.services.prediction_service import (
+    CaseNotTrainedError,
+    PredictionService,
 )
 from backend.services.schema_registry import (
     SCHEMA_TABLES,
@@ -61,6 +68,15 @@ from backend.services.sql_executor import (
 __all__ = [
     # base
     "BaseService",
+    # auth
+    "AuthService",
+    "AuthError",
+    "ForbiddenError",
+    "hash_password",
+    "verify_password",
+    # notifications / presence (Phase 11)
+    "NotificationService",
+    "PresenceService",
     # case
     "ALLOWED_SORT_FIELDS",
     "CaseFilters",
@@ -75,6 +91,8 @@ __all__ = [
     "SummaryCounts",
     # AI collaboration (Phase 6)
     "AIQueryService",
+    "PredictionService",          # Phase 9
+    "CaseNotTrainedError",       # Phase 9
     "SQLExecutor",
     "SQLAlchemySQLExecutor",
     "ExecutionResult",

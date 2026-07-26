@@ -533,8 +533,15 @@ class SQLValidationService:
         return aliases
 
     def _check_known_tables(self, tables: Iterable[str]) -> None:
-        """Reject any table not in the allowlist."""
-        unknown = sorted(t for t in tables if t not in self._schema)
+        """Reject any table not in the allowlist.
+
+        Matching is case-insensitive — the schema registry is keyed in
+        lowercase but the LLM often returns PascalCase. We look up by
+        ``table.lower()`` so ``CaseMaster`` and ``casemaster`` both
+        pass.
+        """
+        schema_keys = {k.lower() for k in self._schema}
+        unknown = sorted(t for t in tables if t.lower() not in schema_keys)
         if unknown:
             raise ValidationFailure(
                 f"SQL references unknown table(s): {unknown}. "
@@ -560,8 +567,13 @@ class SQLValidationService:
         if not referenced_tables:
             return
         allowed_columns: set[str] = set()
+        # Case-insensitive table lookup so LLM-generated SQL with
+        # ``FROM CaseMaster`` still finds the lowercase allowlist.
+        schema_lower = {k.lower(): v for k, v in self._schema.items()}
         for table in referenced_tables:
-            allowed_columns.update(self._schema.get(table, frozenset()))
+            allowed_columns.update(
+                schema_lower.get(table.lower(), frozenset())
+            )
 
         # Strip string literals and parameters, then tokenise.
         cleaned = _RE_STRING_LITERAL.sub("''", sql)

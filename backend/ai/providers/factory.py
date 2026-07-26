@@ -28,6 +28,7 @@ from backend.ai.providers.errors import (
     UnsupportedProviderError,
 )
 from backend.ai.providers.gemini import GeminiProvider
+from backend.ai.providers.nvidia import NvidiaProvider
 
 if TYPE_CHECKING:
     from backend.config.settings import Settings
@@ -86,12 +87,28 @@ def _build_provider(settings: "Settings") -> AIProvider:
     name = (settings.ai_provider or "").strip().lower()
     if name == "gemini":
         return _build_gemini(settings)
-    # The literal is the only branch today. Future phases add
-    # ``"claude"``, ``"openai"``, ``"groq"``, ``"openrouter"``.
+    if name == "nvidia":
+        return _build_nvidia(settings)
     raise UnsupportedProviderError(
         f"AI provider '{name}' is not supported. "
-        f"Implemented providers: 'gemini'.",
+        f"Implemented providers: 'gemini', 'nvidia'.",
         provider=name or "<unset>",
+    )
+
+
+def _build_nvidia(settings: "Settings") -> NvidiaProvider:
+    """Build the NVIDIA NIM provider from validated settings."""
+    if not settings.nvidia_api_key:
+        raise AIConfigurationError(
+            "NVIDIA_API_KEY is empty. Set the environment variable.",
+            provider="nvidia",
+        )
+    return NvidiaProvider(
+        api_key=settings.nvidia_api_key,
+        model=settings.nvidia_model,
+        timeout=settings.ai_request_timeout_seconds,
+        max_retries=settings.ai_max_retries,
+        logger=_LOGGER,
     )
 
 

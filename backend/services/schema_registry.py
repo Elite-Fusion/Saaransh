@@ -2,25 +2,9 @@
 Schema registry — the **single source of truth** for the SQL
 allowlist used by the AI investigation engine.
 
-The Phase 6 :class:`~backend.ai.services.sql_validation_service.SQLValidationService`
-rejects any SQL that references a table not in :data:`SCHEMA_TABLES` or a
-column not in that table's column set. The constants below mirror
-:file:`database/schema/ksp_real_schema.sql` exactly — a drift test in
-:mod:`backend.tests.test_services.test_schema_registry` parses the SQL
-schema and asserts every ``CREATE TABLE`` and its columns is reflected
-here.
-
-Why this lives in :mod:`backend.services` and not :mod:`backend.ai`?
-
-The Phase 5 independence test
-(:mod:`backend.tests.test_ai.test_ai_independence`) forbids any
-``backend/ai/**`` file from importing ``backend.database``,
-``backend.models``, or ``sqlalchemy``. The AI services use this
-registry through a Protocol / a thin :class:`AIQueryService` facade so
-the AI layer stays free of database imports. The registry itself is
-plain data — ``frozenset`` of strings — and has no runtime dependency
-on SQLAlchemy. We keep it under ``services`` for consistency with the
-existing layout and to make the drift test a one-liner.
+All table names and column names are lowercase to match the Supabase
+schema exactly. The validator uses case-insensitive matching so
+LLM-generated SQL with mixed case still validates correctly.
 """
 from __future__ import annotations
 
@@ -29,116 +13,110 @@ from typing import Mapping
 
 
 # ---------------------------------------------------------------------
-# Per-table column allowlists
+# Per-table column allowlists (all lowercase — mirrors Supabase)
 # ---------------------------------------------------------------------
-# These mirror ``database/schema/ksp_real_schema.sql``. Keep them in
-# alphabetical order within each constant to make drift easy to spot.
 
 STATE_COLS: frozenset[str] = frozenset(
-    {"StateID", "StateName", "NationalityID", "Active"}
+    {"stateid", "statename", "nationalityid", "active"}
 )
 DISTRICT_COLS: frozenset[str] = frozenset(
-    {"DistrictID", "DistrictName", "StateID", "Active"}
+    {"districtid", "districtname", "stateid", "active"}
 )
 UNIT_TYPE_COLS: frozenset[str] = frozenset(
-    {"UnitTypeID", "UnitTypeName", "CityDistState", "Hierarchy", "Active"}
+    {"unittypeid", "unittypename", "citydiststate", "hierarchy", "active"}
 )
 UNIT_COLS: frozenset[str] = frozenset(
     {
-        "UnitID",
-        "UnitName",
-        "TypeID",
-        "ParentUnit",
-        "StateID",
-        "DistrictID",
+        "unitid",
+        "unitname",
+        "typeid",
+        "parentunit",
+        "stateid",
+        "districtid",
         "latitude",
         "longitude",
-        "Active",
+        "active",
     }
 )
 RANK_COLS: frozenset[str] = frozenset(
-    {"RankID", "RankName", "Hierarchy", "Active"}
+    {"rankid", "rankname", "hierarchy", "active"}
 )
 DESIGNATION_COLS: frozenset[str] = frozenset(
-    {"DesignationID", "DesignationName", "SortOrder", "Active"}
+    {"designationid", "designationname", "sortorder", "active"}
 )
 EMPLOYEE_COLS: frozenset[str] = frozenset(
     {
-        "EmployeeID",
-        "DistrictID",
-        "UnitID",
-        "RankID",
-        "DesignationID",
-        "KGID",
-        "FirstName",
-        "EmployeeDOB",
-        "GenderID",
-        "BloodGroupID",
-        "PhysicallyChallenged",
-        "AppointmentDate",
-        "Active",
+        "employeeid",
+        "districtid",
+        "unitid",
+        "rankid",
+        "designationid",
+        "kgid",
+        "firstname",
+        "employeedob",
+        "genderid",
+        "bloodgroupid",
+        "physicallychallenged",
+        "appointmentdate",
+        "active",
     }
 )
 COURT_COLS: frozenset[str] = frozenset(
-    {"CourtID", "CourtName", "DistrictID", "StateID", "Active"}
+    {"courtid", "courtname", "districtid", "stateid", "active"}
 )
 CASE_CATEGORY_COLS: frozenset[str] = frozenset(
-    {"CaseCategoryID", "LookupValue"}
+    {"casecategoryid", "lookupvalue"}
 )
 GRAVITY_COLS: frozenset[str] = frozenset(
-    {"GravityOffenceID", "LookupValue"}
+    {"gravityoffenceid", "lookupvalue"}
 )
 CASE_STATUS_COLS: frozenset[str] = frozenset(
-    {"CaseStatusID", "CaseStatusName"}
+    {"casestatusid", "casestatusname"}
 )
 CRIME_HEAD_COLS: frozenset[str] = frozenset(
-    {"CrimeHeadID", "CrimeGroupName", "Active"}
+    {"crimeheadid", "crimegroupname", "active"}
 )
 CRIME_SUB_HEAD_COLS: frozenset[str] = frozenset(
-    {"CrimeSubHeadID", "CrimeHeadID", "CrimeHeadName", "SeqID", "Active"}
+    {"crimesubheadid", "crimeheadid", "crimeheadname", "seqid", "active"}
 )
 ACT_COLS: frozenset[str] = frozenset(
-    {"ActCode", "ActDescription", "ShortName", "Active"}
+    {"actcode", "actdescription", "shortname", "active"}
 )
 SECTION_COLS: frozenset[str] = frozenset(
-    {"SectionCode", "ActCode", "SectionDescription", "Active"}
+    {"sectioncode", "actcode", "sectiondescription", "active"}
 )
 CRIME_HEAD_ACT_SECTION_COLS: frozenset[str] = frozenset(
-    {"CrimeHeadID", "ActCode", "SectionCode"}
+    {"crimeheadid", "actcode", "sectioncode"}
 )
 OCCUPATION_COLS: frozenset[str] = frozenset(
-    {"OccupationID", "OccupationName"}
+    {"occupationid", "occupationname"}
 )
 RELIGION_COLS: frozenset[str] = frozenset(
-    {"ReligionID", "ReligionName"}
+    {"religionid", "religionname"}
 )
 CASTE_COLS: frozenset[str] = frozenset(
     {"caste_master_id", "caste_master_name"}
 )
-
-# The KSP CaseMaster has a vector embedding column. The AI-generated
-# SQL is unlikely to touch it, but we keep it in the allowlist so a
-# hand-written "give me the vector for case N" query still validates.
 CASE_MASTER_COLS: frozenset[str] = frozenset(
     {
-        "CaseMasterID",
-        "CrimeNo",
-        "CaseNo",
-        "CrimeRegisteredDate",
-        "PolicePersonID",
-        "PoliceStationID",
-        "CaseCategoryID",
-        "GravityOffenceID",
-        "CrimeMajorHeadID",
-        "CrimeMinorHeadID",
-        "CaseStatusID",
-        "CourtID",
-        "IncidentFromDate",
-        "IncidentToDate",
-        "InfoReceivedPSDate",
+        "casemasterid",
+        "crimeno",
+        "caseno",
+        "crimeregistereddate",
+        "policepersonid",
+        "policestationid",
+        "casecategoryid",
+        "gravityoffenceid",
+        "crimemajorheadid",
+        "crimeminorheadid",
+        "casestatusid",
+        "courtid",
+        "incidentfromdate",
+        "incidenttodate",
+        "inforeceivedpsdate",
         "latitude",
         "longitude",
-        "BriefFacts",
+        "brieffacts",
         "mo_embedding",
         "is_series_crime",
         "series_id",
@@ -147,36 +125,36 @@ CASE_MASTER_COLS: frozenset[str] = frozenset(
 )
 COMPLAINANT_COLS: frozenset[str] = frozenset(
     {
-        "ComplainantID",
-        "CaseMasterID",
-        "ComplainantName",
-        "AgeYear",
-        "OccupationID",
-        "ReligionID",
-        "CasteID",
-        "GenderID",
+        "complainantid",
+        "casemasterid",
+        "complainantname",
+        "ageyear",
+        "occupationid",
+        "religionid",
+        "casteid",
+        "genderid",
     }
 )
 VICTIM_COLS: frozenset[str] = frozenset(
     {
-        "VictimMasterID",
-        "CaseMasterID",
-        "VictimName",
-        "AgeYear",
-        "GenderID",
-        "VictimPolice",
+        "victimmasterid",
+        "casemasterid",
+        "victimname",
+        "ageyear",
+        "genderid",
+        "victimpolice",
         "photo_url",
         "photo_hash",
     }
 )
 ACCUSED_COLS: frozenset[str] = frozenset(
     {
-        "AccusedMasterID",
-        "CaseMasterID",
-        "AccusedName",
-        "AgeYear",
-        "GenderID",
-        "PersonID",
+        "accusedmasterid",
+        "casemasterid",
+        "accusedname",
+        "ageyear",
+        "genderid",
+        "personid",
         "photo_url",
         "photo_hash",
         "address",
@@ -186,42 +164,42 @@ ACCUSED_COLS: frozenset[str] = frozenset(
 )
 ARREST_SURRENDER_COLS: frozenset[str] = frozenset(
     {
-        "ArrestSurrenderID",
-        "CaseMasterID",
-        "ArrestSurrenderTypeID",
-        "ArrestSurrenderDate",
-        "ArrestSurrenderStateId",
-        "ArrestSurrenderDistrictId",
-        "PoliceStationID",
-        "IOID",
-        "CourtID",
-        "AccusedMasterID",
-        "IsAccused",
-        "IsComplainantAccused",
+        "arrestsurrenderid",
+        "casemasterid",
+        "arrestsurrendertypeid",
+        "arrestsurrenderdate",
+        "arrestsurrenderstateid",
+        "arrestsurrenderdistrictid",
+        "policestationid",
+        "ioid",
+        "courtid",
+        "accusedmasterid",
+        "isaccused",
+        "iscomplainantaccused",
     }
 )
 ACT_SECTION_ASSOC_COLS: frozenset[str] = frozenset(
     {
-        "CaseMasterID",
-        "ActID",
-        "SectionID",
-        "ActOrderID",
-        "SectionOrderID",
+        "casemasterid",
+        "actid",
+        "sectionid",
+        "actorderid",
+        "sectionorderid",
     }
 )
 CHARGESHEET_COLS: frozenset[str] = frozenset(
     {
-        "CSID",
-        "CaseMasterID",
+        "csid",
+        "casemasterid",
         "csdate",
         "cstype",
-        "PolicePersonID",
+        "policepersonid",
     }
 )
 EVIDENCE_COLS: frozenset[str] = frozenset(
     {
-        "EvidenceID",
-        "CaseMasterID",
+        "evidenceid",
+        "casemasterid",
         "evidence_type",
         "file_url",
         "file_hash",
@@ -235,9 +213,9 @@ EVIDENCE_COLS: frozenset[str] = frozenset(
 )
 RECOVERED_ITEMS_COLS: frozenset[str] = frozenset(
     {
-        "RecoveryID",
-        "CaseMasterID",
-        "AccusedMasterID",
+        "recoveryid",
+        "casemasterid",
+        "accusedmasterid",
         "item_description",
         "quantity",
         "estimated_value",
@@ -253,8 +231,8 @@ RECOVERED_ITEMS_COLS: frozenset[str] = frozenset(
 )
 AUDIT_LOG_COLS: frozenset[str] = frozenset(
     {
-        "LogID",
-        "EmployeeID",
+        "logid",
+        "employeeid",
         "officer_name",
         "officer_rank",
         "action",
@@ -266,8 +244,8 @@ AUDIT_LOG_COLS: frozenset[str] = frozenset(
 )
 USERS_COLS: frozenset[str] = frozenset(
     {
-        "UserID",
-        "EmployeeID",
+        "userid",
+        "employeeid",
         "email",
         "role",
         "is_active",
@@ -278,40 +256,40 @@ USERS_COLS: frozenset[str] = frozenset(
 
 
 # ---------------------------------------------------------------------
-# The master allowlist
+# The master allowlist — keys are lowercase table names
 # ---------------------------------------------------------------------
 
 SCHEMA_TABLES: dict[str, frozenset[str]] = {
-    "State": STATE_COLS,
-    "District": DISTRICT_COLS,
-    "UnitType": UNIT_TYPE_COLS,
-    "Unit": UNIT_COLS,
-    "Rank": RANK_COLS,
-    "Designation": DESIGNATION_COLS,
-    "Employee": EMPLOYEE_COLS,
-    "Court": COURT_COLS,
-    "CaseCategory": CASE_CATEGORY_COLS,
-    "GravityOffence": GRAVITY_COLS,
-    "CaseStatusMaster": CASE_STATUS_COLS,
-    "CrimeHead": CRIME_HEAD_COLS,
-    "CrimeSubHead": CRIME_SUB_HEAD_COLS,
-    "Act": ACT_COLS,
-    "Section": SECTION_COLS,
-    "CrimeHeadActSection": CRIME_HEAD_ACT_SECTION_COLS,
-    "OccupationMaster": OCCUPATION_COLS,
-    "ReligionMaster": RELIGION_COLS,
-    "CasteMaster": CASTE_COLS,
-    "CaseMaster": CASE_MASTER_COLS,
-    "ComplainantDetails": COMPLAINANT_COLS,
-    "Victim": VICTIM_COLS,
-    "Accused": ACCUSED_COLS,
-    "ArrestSurrender": ARREST_SURRENDER_COLS,
-    "ActSectionAssociation": ACT_SECTION_ASSOC_COLS,
-    "ChargesheetDetails": CHARGESHEET_COLS,
-    "Evidence": EVIDENCE_COLS,
-    "RecoveredItems": RECOVERED_ITEMS_COLS,
-    "AuditLog": AUDIT_LOG_COLS,
-    "Users": USERS_COLS,
+    "state": STATE_COLS,
+    "district": DISTRICT_COLS,
+    "unittype": UNIT_TYPE_COLS,
+    "unit": UNIT_COLS,
+    "rank": RANK_COLS,
+    "designation": DESIGNATION_COLS,
+    "employee": EMPLOYEE_COLS,
+    "court": COURT_COLS,
+    "casecategory": CASE_CATEGORY_COLS,
+    "gravityoffence": GRAVITY_COLS,
+    "casestatusmaster": CASE_STATUS_COLS,
+    "crimehead": CRIME_HEAD_COLS,
+    "crimesubhead": CRIME_SUB_HEAD_COLS,
+    "act": ACT_COLS,
+    "section": SECTION_COLS,
+    "crimeheadactsection": CRIME_HEAD_ACT_SECTION_COLS,
+    "occupationmaster": OCCUPATION_COLS,
+    "religionmaster": RELIGION_COLS,
+    "castemaster": CASTE_COLS,
+    "casemaster": CASE_MASTER_COLS,
+    "complainantdetails": COMPLAINANT_COLS,
+    "victim": VICTIM_COLS,
+    "accused": ACCUSED_COLS,
+    "arrestsurrender": ARREST_SURRENDER_COLS,
+    "actsectionassociation": ACT_SECTION_ASSOC_COLS,
+    "chargesheetdetails": CHARGESHEET_COLS,
+    "evidence": EVIDENCE_COLS,
+    "recovereditems": RECOVERED_ITEMS_COLS,
+    "auditlog": AUDIT_LOG_COLS,
+    "users": USERS_COLS,
 }
 
 
@@ -321,29 +299,17 @@ SCHEMA_TABLES: dict[str, frozenset[str]] = {
 
 
 def get_schema_registry() -> Mapping[str, frozenset[str]]:
-    """Return the process-wide schema allowlist.
-
-    The function is intentionally a one-liner that returns the module
-    constant — but exposing it through a function gives callers
-    (services, tests) a single import to mock or override.
-    """
+    """Return the process-wide schema allowlist."""
     return SCHEMA_TABLES
 
 
 @lru_cache(maxsize=1)
 def _cached_registry() -> Mapping[str, frozenset[str]]:
-    """Cached view of the registry, in case a future hot path needs it."""
     return SCHEMA_TABLES
 
 
 def get_schema_summary() -> str:
-    """Return a Markdown table of every table and its columns.
-
-    The text is injected into the ``{{SCHEMA_SUMMARY}}`` placeholder of
-    :file:`backend/ai/prompts/sql_prompt.md` so the LLM sees the same
-    schema the validator enforces. A drift test asserts the rendered
-    output mentions every table name.
-    """
+    """Return a Markdown table of every table and its columns."""
     lines: list[str] = [
         "| Table | Columns |",
         "|---|---|",
@@ -354,17 +320,13 @@ def get_schema_summary() -> str:
 
 
 def is_known_table(table: str) -> bool:
-    """Return ``True`` if ``table`` is in the allowlist."""
-    return table in SCHEMA_TABLES
+    """Return ``True`` if ``table`` is in the allowlist (case-insensitive)."""
+    return table.lower() in SCHEMA_TABLES
 
 
 def known_columns(table: str) -> frozenset[str]:
-    """Return the allowlisted column set for ``table``.
-
-    Returns an empty ``frozenset`` if the table is unknown — callers
-    are expected to have already checked :func:`is_known_table`.
-    """
-    return SCHEMA_TABLES.get(table, frozenset())
+    """Return the allowlisted column set for ``table``."""
+    return SCHEMA_TABLES.get(table.lower(), frozenset())
 
 
 __all__ = [

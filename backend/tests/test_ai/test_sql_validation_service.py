@@ -582,3 +582,112 @@ class TestValidatorVerbSets:
             "unsupported_verb",
             "forbidden_token",
         )
+
+
+# ---------------------------------------------------------------------
+# Case-insensitive matching: the production schema registry is
+# lowercase, but the LLM routinely emits PascalCase. The validator
+# must accept both shapes.
+# ---------------------------------------------------------------------
+
+
+class TestValidatorCaseInsensitive:
+    """The schema registry is keyed in lowercase (mirrors Supabase
+    tables) but the LLM often returns PascalCase. The validator
+    must accept either."""
+
+    @pytest.fixture
+    def lowercase_schema(self):
+        return {
+            "casemaster": frozenset(
+                {
+                    "casemasterid",
+                    "crimeno",
+                    "casestatusid",
+                    "brieffacts",
+                    "caseno",
+                }
+            ),
+            "casestatusmaster": frozenset({"casestatusid", "casestatusname"}),
+        }
+
+    def test_lowercase_table_with_lowercase_columns(self, lowercase_schema):
+        v = SQLValidationService(schema=lowercase_schema)
+        out = v.validate(
+            _gen(
+                "SELECT casemasterid, crimeno FROM casemaster "
+                "WHERE casestatusid = :sid",
+                params={"sid": 1},
+            )
+        )
+        assert out.sql == (
+            "SELECT casemasterid, crimeno FROM casemaster "
+            "WHERE casestatusid = :sid"
+        )
+
+    def test_pascalcase_table_with_lowercase_columns(self, lowercase_schema):
+        v = SQLValidationService(schema=lowercase_schema)
+        out = v.validate(
+            _gen(
+                "SELECT casemasterid, crimeno FROM CaseMaster "
+                "WHERE casestatusid = :sid",
+                params={"sid": 1},
+            )
+        )
+        # The validator does NOT rewrite the SQL — it accepts the
+        # original case. PostgreSQL folds unquoted identifiers to
+        # lowercase anyway.
+        assert "CaseMaster" in out.sql
+
+    def test_pascalcase_table_with_pascalcase_columns(self, lowercase_schema):
+        v = SQLValidationService(schema=lowercase_schema)
+        out = v.validate(
+            _gen(
+                "SELECT CaseMasterID, CrimeNo FROM CaseMaster "
+                "WHERE CaseStatusID = :sid",
+                params={"sid": 1},
+            )
+        )
+        assert "CaseMasterID" in out.sql
+
+    def test_uppercase_identifiers(self, lowercase_schema):
+        v = SQLValidationService(schema=lowercase_schema)
+        out = v.validate(
+            _gen(
+                "SELECT CASEMASTERID FROM CASEMASTER",
+            )
+        )
+        assert "CASEMASTERID" in out.sql
+
+    def test_unknown_table_still_rejected(self, lowercase_schema):
+        v = SQLValidationService(schema=lowercase_schema)
+        with pytest.raises(ValidationFailure) as ei:
+            v.validate(_gen("SELECT x FROM UnknownTable"))
+        assert ei.value.category == "unknown_table"
+
+    def test_unknown_column_still_rejected(self, lowercase_schema):
+        v = SQLValidationService(schema=lowercase_schema)
+        with pytest.raises(ValidationFailure) as ei:
+            v.validate(
+                _gen(
+                    "SELECT BadColumn FROM casemaster",
+                )
+            )
+        assert ei.value.category == "unknown_column"
+
+    def test_real_ksp_schema_pascalcase_sql(self):
+        """End-to-end check against the production schema registry:
+        a PascalCase query against a lowercase allowlist must pass."""
+        from backend.services.schema_registry import SCHEMA_TABLES
+
+        v = SQLValidationService(schema=SCHEMA_TABLES)
+        out = v.validate(
+            _gen(
+                "SELECT CaseMasterID, CrimeNo, BriefFacts FROM CaseMaster "
+                "WHERE CaseStatusID = :sid "
+                "ORDER BY CaseMasterID DESC LIMIT 100",
+                params={"sid": 1},
+            )
+        )
+        assert out.sql  # round-trips
+        assert "casemaster" in {t.lower() for t in out.tables}

@@ -48,6 +48,19 @@ class Intent(str, Enum):
     EXPLAIN_CASE = "explain_case"
     UNKNOWN = "unknown"
 
+    # Conversational Assistant Intents (Phase 13)
+    GREETING = "greeting"
+    FAREWELL = "farewell"
+    HELP = "help"
+    CLARIFICATION = "clarification"
+    CASE_SUSPECTS = "case_suspects"
+    CASE_EVIDENCE = "case_evidence"
+    CASE_TIMELINE = "case_timeline"
+    CASE_IO = "case_io"
+    CASE_STATUS = "case_status"
+
+
+
 
 # Allowed SQL verbs for the LLM output. Mirrors the executor's
 # READ_ONLY_VERBS but re-declared here so the schema is self-contained.
@@ -270,6 +283,21 @@ class InvestigationResponse(BaseModel):
     row_count: int | None = Field(default=None, ge=0)
     columns: list[str] | None = None
     placeholder: dict[str, Any] | None = None
+    # Phase 8 — the actual rows the SQL executor returned. ``None``
+    # on the service-method path (the per-row evidence is already in
+    # ``supporting_evidence``) and a list of dicts on the SQL path.
+    # Each dict's keys are the column names from ``columns``.
+    results: list[dict[str, Any]] | None = None
+
+    # Investigation report fields (Phase 6)
+    investigation_report: dict[str, Any] | None = None
+
+    # Conversational assistance fields (Phase 13)
+    recommended_actions: list[str] = Field(default_factory=list, description="Recommended next steps for police investigators.")
+    follow_up_suggestions: list[str] = Field(default_factory=list, description="Suggested follow-up questions for the officer.")
+
+
+
 
 
 # ---------------------------------------------------------------------
@@ -319,6 +347,18 @@ class PlaceholderOperation(BaseModel):
     feature: Literal["similar_cases"] = "similar_cases"
     case_id: int | None = None
     message: str = "Similar-case search is scheduled for Phase 7."
+
+
+EvidenceItem.model_rebuild()
+ExplanationBlock.model_rebuild()
+InvestigationResponse.model_rebuild()
+CaseSearchOperation.model_rebuild()
+DashboardAnalyticsOperation.model_rebuild()
+ExplainCaseOperation.model_rebuild()
+InvestigationSummaryOperation.model_rebuild()
+PlaceholderOperation.model_rebuild()
+
+
 
 
 __all__ = [

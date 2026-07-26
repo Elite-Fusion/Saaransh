@@ -1,293 +1,314 @@
 # Saaransh AI
 
-> **Conversational crime-investigation co-pilot for the Karnataka State Police Datathon.**
+> **AI-powered Crime Investigation Assistant for the Karnataka State Police Datathon.**
 
-Saaransh lets police officers query the KSP FIR database in
-natural language (English and Kannada), detect similar cases,
-surface cross-case links (shared phones, addresses, vehicles,
-gang membership), and get explainable, evidence-backed answers.
-Every response cites the cases it relied on; the system never
-invents a `case_id` or an FIR number.
+Saaransh lets police officers query the KSP FIR database in natural language (English and Kannada), detect similar cases, surface cross-case links (shared phones, addresses, vehicles, gang membership), and get explainable, evidence-backed answers. Every response cites the cases it relied on — the system never invents a `case_id` or an FIR number.
 
-The system is built around five principles, lifted directly from
-the project brief:
+## Core Principles
 
-1. **Accuracy** — answers are grounded in real records, not
-   generated from model priors.
-2. **Explainability** — every response carries a `why`, an
-   `evidence` list, and a `confidence` level.
-3. **Maintainability** — the codebase is split into
-   provider-independent layers so swapping the LLM is a
-   one-file change.
-4. **Modularity** — every component can be replaced in
-   isolation (provider, prompt template, embedding model,
-   graph backend).
-5. **Security** — secrets stay in `.env`, SQL is parameterised,
-   prompts are read-only templates, every AI call is logged
-   with timestamp, user, prompt, generated SQL, and outcome.
+1. **Accuracy** — answers are grounded in real records, not generated from model priors.
+2. **Explainability** — every response carries a `why`, an `evidence` list, and a `confidence` level.
+3. **Maintainability** — provider-independent layers so swapping the LLM is a one-file change.
+4. **Modularity** — every component can be replaced in isolation (provider, prompt template, embedding model, graph backend).
+5. **Security** — secrets in `.env`, parameterised SQL, read-only prompt templates, full audit logging.
 
 ---
 
-## 📦 Repository layout
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | React 18, Vite, Tailwind CSS, React Router, React Query, Recharts |
+| Backend | FastAPI, Python 3.12+, SQLAlchemy 2.0, Pydantic v2 |
+| Database | PostgreSQL (Supabase), pgvector |
+| AI | Google Gemini API (provider-independent abstraction) |
+| ML | scikit-learn (DBSCAN, Random Forest, Gradient Boosting, TF-IDF) |
+| Real-Time | WebSocket (FastAPI), event bus, connection manager |
+| Auth | JWT (python-jose), bcrypt, RBAC |
+| Deployment | Docker, Nginx, GitHub Actions CI/CD |
+
+---
+
+## Project Status
+
+| Phase | Description | Status |
+|-------|-------------|--------|
+| 1 | Backend foundation (FastAPI + SQLAlchemy + Pydantic) | ✅ |
+| 2 | Database schema (30+ ORM models, ER docs) | ✅ |
+| 3 | Case APIs (list, detail, filters, pagination) | ✅ |
+| 4 | Analytics (dashboard summary, trends, distributions) | ✅ |
+| 5 | AI foundation (provider abstraction, Gemini, prompt loader) | ✅ |
+| 6 | Investigation engine (intent classifier, SQL validator, explanation) | ✅ |
+| 7 | Frontend (React, routing, pages, components) | ✅ |
+| 8 | Hybrid AI (NL-to-SQL, similarity, cross-case linking) | ✅ |
+| 9 | Predictive intelligence (hotspots, trends, clustering, risk scoring) | ✅ |
+| 10 | Authentication (JWT, RBAC, audit logging) | ✅ |
+| 11 | Real-time intelligence (WebSocket, notifications, presence) | ✅ |
+| 12 | Production deployment (Docker, Nginx, CI/CD, monitoring) | ✅ |
+
+---
+
+## Repository Layout
 
 ```
 saaransh-ai/
-├── backend/           # FastAPI + SQLAlchemy + Pydantic + AI provider
-│   ├── api/           # HTTP routers (v1)
-│   ├── ai/            # AI provider abstraction (Phase 5)
-│   ├── config/        # Pydantic settings + logging
-│   ├── database/      # SQLAlchemy engine + session
-│   ├── models/        # ORM models (30+ tables)
-│   ├── schemas/       # request / response Pydantic models
-│   ├── services/      # business logic (FastAPI-independent)
-│   ├── tests/         # pytest (mocked — no live DB needed)
-│   └── main.py
-├── frontend/          # React + Vite + Tailwind (separate workstream)
-├── database/
-│   ├── schema/        # KSP FIR schema
-│   └── seed/          # seed data
-├── scripts/           # project-wide utilities
-│   ├── db_test.py
-│   └── generate_erd.py
-├── .env.example       # top-level env var template
-└── README.md          # ← you are here
+├── backend/
+│   ├── api/v1/            # HTTP routers (auth, cases, dashboard, ai, predictions, health, monitoring, ws)
+│   ├── ai/                # AI provider abstraction + prompt templates
+│   ├── config/            # Settings, structured logging
+│   ├── database/          # SQLAlchemy engine + session
+│   ├── middleware/         # Audit, auth, security headers, rate limiting
+│   ├── models/            # ORM models (30+ tables)
+│   ├── schemas/           # Pydantic request/response models
+│   ├── services/          # Business logic (FastAPI-independent)
+│   ├── tests/             # 692+ tests (pytest)
+│   ├── websocket/         # ConnectionManager, EventBus
+│   └── main.py            # Application entry point
+├── frontend/
+│   ├── src/
+│   │   ├── api/           # Axios API client with JWT interceptors
+│   │   ├── components/    # Card, StatusStates, ProtectedRoute
+│   │   ├── contexts/      # AuthContext, WebSocketContext
+│   │   ├── hooks/         # useWebSocket, useNotifications, useLiveDashboard, usePresence
+│   │   ├── layout/        # Sidebar, Topbar
+│   │   ├── pages/         # Login, Dashboard, Cases, Map, Predictions, AI Assistant, Analytics, etc.
+│   │   └── App.jsx        # Router + providers
+│   ├── Dockerfile         # Multi-stage build (node → nginx)
+│   └── nginx.conf         # Frontend nginx config
+├── backend/
+│   └── Dockerfile         # Multi-stage build (python slim)
+├── nginx/
+│   └── nginx.conf         # Production reverse proxy config
+├── docker-compose.yml     # Development (backend + frontend + PostgreSQL)
+├── docker-compose.prod.yml# Production (nginx + backend + Redis)
+├── .github/workflows/     # CI/CD (backend-ci, frontend-ci, docker-build)
+├── docs/                  # Deployment guide, backup & recovery
+├── database/              # Schema, seed data, migrations
+├── prompts/               # AI prompt templates
+├── scripts/               # Utility scripts
+└── CLAUDE.md              # AI development rules
 ```
 
-For the backend's full layout, see [`backend/README.md`](./backend/README.md).
-The frontend's README lands when Phase 6 begins.
-
 ---
 
-## 🧭 Phases
+## Quick Start
 
-| Phase | What ships | Status |
-|---|---|---|
-| 1 | Backend foundation: FastAPI + SQLAlchemy + Pydantic settings + logging | ✅ |
-| 2 | Database: schema, 30 ORM models, ER doc | ✅ |
-| 3 | Read-only case APIs (`GET /api/v1/cases`, `GET /api/v1/cases/{id}`) + service layer | ✅ |
-| 3.5 | OpenAPI examples, `BaseService` for AI reuse, API versioning policy | ✅ |
-| 4 | Analytics module (`/api/v1/dashboard/*`) + `AnalyticsService` | ✅ |
-| 5 | AI foundation: provider abstraction, Gemini provider, prompt loader, `ChatService`, 4 prompt templates, planning doc | ✅ |
-| **6** | **AI investigation engine: intent classifier, allowlist SQL validator, read-only executor, explanation layer, 354 unit tests** | **✅** |
-| 7 | Embeddings + similarity engine (`pgvector`) | ⏳ |
-| 8 | Neo4j cross-case graph + investigation prompt wiring | ⏳ |
-| 9 | Voice (STT + TTS) | ⏳ |
-| 10 | Auth (JWT), RBAC, AI-call audit logging | ⏳ |
-
----
-
-## 🚀 Quick start (backend)
-
-The backend runs locally with **no external services required**
-for the read-only case and dashboard endpoints — the test
-suite uses mocked SQLAlchemy sessions.
+### Backend
 
 ```bash
-# 1. Set up Python
 cd backend
 python -m venv .venv
-source .venv/Scripts/activate          # Windows Git Bash
-# or:  source .venv/bin/activate        # Linux / macOS
+source .venv/Scripts/activate        # Windows
+# source .venv/bin/activate          # Linux/macOS
 
-# 2. Install deps
 pip install --upgrade pip
 pip install -r requirements.txt
 
-# 3. Configure
 cp .env.example .env
-# edit DATABASE_URL if you have a Postgres instance
+# Edit .env — set GEMINI_API_KEY and DATABASE_URL
 
-# 4. Run
 uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Then open <http://localhost:8000/docs> for Swagger, or hit
-<http://localhost:8000/api/v1/health> for a quick liveness
-probe.
+API docs: <http://localhost:8000/docs>
+Health check: <http://localhost:8000/api/v1/health>
 
-For the AI layer (Phase 5), set `GEMINI_API_KEY` in
-`backend/.env` and the app will fail fast at startup if the
-key is missing.
-
----
-
-## 🧪 Tests
+### Frontend
 
 ```bash
-# From the repo root
+cd frontend
+npm install
+
+cp .env.example .env
+# Edit .env — set VITE_API_BASE_URL
+
+npm run dev
+```
+
+Frontend: <http://localhost:5173>
+
+### Docker (Development)
+
+```bash
+docker-compose up -d
+```
+
+### Docker (Production)
+
+```bash
+docker-compose -f docker-compose.prod.yml up -d
+```
+
+---
+
+## Environment Variables
+
+### Backend (`backend/.env`)
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `DATABASE_URL` | PostgreSQL connection string | Yes |
+| `GEMINI_API_KEY` | Google AI Studio API key | Yes |
+| `JWT_SECRET_KEY` | HMAC secret for JWT signing | Yes |
+| `ENVIRONMENT` | `development` / `staging` / `production` | No |
+| `DEBUG` | Enable debug mode | No |
+| `LOG_LEVEL` | `DEBUG`, `INFO`, `WARNING`, `ERROR` | No |
+| `LOG_FORMAT` | `text` (dev) or `json` (prod) | No |
+| `CORS_ORIGINS` | Comma-separated allowed origins | No |
+| `DB_POOL_SIZE` | Connection pool size | No |
+
+### Frontend (`frontend/.env`)
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `VITE_API_BASE_URL` | Backend API base URL | `http://localhost:8000/api/v1` |
+
+---
+
+## API Endpoints
+
+### Authentication
+- `POST /api/v1/auth/login` — Login (returns access + refresh tokens)
+- `POST /api/v1/auth/refresh` — Refresh access token
+- `GET /api/v1/auth/me` — Current user profile
+
+### Cases
+- `GET /api/v1/cases` — List FIRs (paginated, filterable, sortable)
+- `GET /api/v1/cases/{id}` — Case detail
+
+### Dashboard & Analytics
+- `GET /api/v1/dashboard/summary` — Dashboard summary stats
+- `GET /api/v1/dashboard/trends` — Monthly trends
+- `GET /api/v1/dashboard/crime-head-distribution` — Crime type breakdown
+- `GET /api/v1/dashboard/district-distribution` — District breakdown
+- `GET /api/v1/dashboard/recent-cases` — Recent cases
+
+### AI Investigation
+- `POST /api/v1/ai/investigate` — Natural language crime investigation
+
+### Predictions
+- `GET /api/v1/predictions/hotspots` — Crime hotspot prediction
+- `GET /api/v1/predictions/trends` — Trend forecasting
+- `GET /api/v1/predictions/repeat-offenders` — Repeat offender detection
+- `GET /api/v1/predictions/clusters` — Crime pattern clustering
+- `GET /api/v1/predictions/risk-score/{case_id}` — Case risk scoring
+- `GET /api/v1/predictions/similar-cases/{case_id}` — Similar case detection
+- `GET /api/v1/predictions/recommendations/{case_id}` — Officer recommendations
+
+### Real-Time
+- `WebSocket /api/v1/ws?token=<JWT>` — Live event stream
+- `GET /api/v1/notifications` — List notifications
+- `GET /api/v1/notifications/unread-count` — Unread count
+- `POST /api/v1/notifications/{id}/read` — Mark read
+- `POST /api/v1/notifications/read-all` — Mark all read
+- `GET /api/v1/presence/online` — Online officers
+- `GET /api/v1/presence/me` — My presence
+
+### Monitoring
+- `GET /api/v1/health` — Health check (database, WebSocket, API key)
+- `GET /api/v1/ready` — Readiness probe
+- `GET /api/v1/live` — Liveness probe
+
+---
+
+## Architecture
+
+```
+React Frontend
+    ↓ (Axios + JWT)
+FastAPI Backend
+    ↓
+Service Layer (FastAPI-independent)
+    ↓
+AI Service → Provider Abstraction → Gemini API
+    ↓
+PostgreSQL + Supabase + pgvector
+    ↓
+Machine Learning (scikit-learn)
+    ↓
+WebSocket → Real-Time Events
+```
+
+---
+
+## Testing
+
+```bash
 cd backend
-pytest tests
+pytest tests/ -v
 ```
 
-Expected: **455+ passed** (98 from Phases 1–4, 100+ from
-Phase 5 AI foundation, and 200+ from Phase 6 — all hermetic,
-no real Gemini call, no real database).
+**692 tests pass** across:
+- Authentication & RBAC (13 tests)
+- Case APIs (22 tests)
+- Dashboard & Analytics (40+ tests)
+- AI Investigation (200+ tests, mocked Gemini)
+- Predictive ML (100+ tests)
+- WebSocket & Real-Time (33 tests)
+- OpenAPI Documentation (14 tests)
+- Service Independence (AST-scanned, no FastAPI imports in services)
 
 ---
 
-## 🧠 Phase 6 — AI investigation engine
+## Deployment
 
-Phase 6 wires the Phase 5 AI foundation into a single
-end-to-end pipeline that takes an officer's natural-language
-question, classifies the intent, generates and validates a
-SQL statement, executes it read-only, and produces an
-evidence-driven explanation.
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for full deployment guide.
 
-### Pipeline
+### Docker
 
-```
-InvestigationService.investigate(question)
-   │
-   ├── IntentService.classify(question)         → Intent
-   │     [LLM call with regex fallback]
-   │
-   ├── IntentRouter.route(intent, question)     → ResolvedOperation
-   │     ├── case_search        → CaseService.list_cases
-   │     ├── dashboard_analytics→ AnalyticsService.{summary, trends}
-   │     ├── explain_case       → CaseService.get_case_detail
-   │     ├── investigation_summary → CaseService.get_case_detail
-   │     ├── similar_cases      → Phase 7 placeholder
-   │     └── unknown            → raise UnknownIntent
-   │
-   ├── SQLGenerationService.generate(...)       → GeneratedSQL
-   │     [LLM call with the SQL prompt + schema]
-   │
-   ├── SQLValidationService.validate(generated) → ValidatedSQL
-   │     [defence-in-depth allowlist: see below]
-   │
-   ├── SQLExecutor.execute(validated)           → ExecutionResult
-   │     [session.execute(text(sql), params) — read-only]
-   │
-   └── ExplanationService.explain(...)          → ExplanationBlock
-         [LLM call with the explanation prompt + rows]
+```bash
+# Development
+docker-compose up -d
+
+# Production
+docker-compose -f docker-compose.prod.yml up -d
 ```
 
-### SQL safety rules (enforced in three layers)
+### Manual Deployment
 
-1. **Validator (primary defence).** Every generated SQL
-   statement passes through
-   `backend.ai.services.sql_validation_service.SQLValidationService`
-   which rejects:
+```bash
+# Backend
+cd backend
+pip install -r requirements.txt
+uvicorn backend.main:app --host 0.0.0.0 --port 8000 --workers 4
 
-   - **Forbidden verbs** — `DELETE`, `UPDATE`, `INSERT`,
-     `DROP`, `TRUNCATE`, `ALTER`, `CREATE`, `GRANT`,
-     `REVOKE`, `MERGE`, `CALL`, `COPY`, `EXEC`, `EXPLAIN`,
-     `SHOW`.
-   - **Multiple statements** — any `;` other than a trailing
-     one.
-   - **Comments** — `--` line comments and `/* */` block
-     comments, even inside string literals? No — the
-     string-literal pass runs first.
-   - **Unknown tables** — every `FROM` and `JOIN` table must
-     be in the schema allowlist
-     (`backend.services.schema_registry.SCHEMA_TABLES`).
-   - **Unknown columns** — every column reference in the
-     SELECT projection, WHERE, or ORDER BY must be in the
-     allowlisted column set of one of the referenced tables.
-     `SELECT *` is permitted.
-   - **Unbound parameters** — every `:name` in the SQL must
-     be present in the `params` dict.
-   - **Non-primitive param values** — `list`, `dict`, and
-     complex objects are rejected; only `str`, `int`, `float`,
-     `bool`, `None` are allowed.
-
-2. **Executor (defence in depth).** Even after the validator,
-   `backend.services.sql_executor.SQLAlchemySQLExecutor` runs
-   `assert_read_only(sql)` before `session.execute(...)`. The
-   executor never concatenates user input — it always uses
-   bound parameters through `sqlalchemy.text(sql)`.
-
-3. **Independence rule.** No file under `backend/ai/` imports
-   `sqlalchemy`, `backend.database`, `backend.models`,
-   `backend.services.sql_executor`, or
-   `backend.services.ai_query_service` — the AI layer depends
-   on the executor only through a Protocol. The
-   `tests/test_ai/test_ai_independence.py` test enforces this.
-
-### Prompt files (the only place prompts live)
-
-```
-backend/ai/prompts/
-├── system_prompt.md
-├── intent_prompt.md      ← classifies the officer's question
-├── sql_prompt.md         ← renders a SELECT against the schema
-├── explanation_prompt.md ← grounds the answer in the result rows
-└── investigation_prompt.md
+# Frontend
+cd frontend
+npm install && npm run build
+# Serve dist/ with nginx or any static server
 ```
 
-Never hardcode a prompt in Python.
+### CI/CD
 
-### Response envelope
-
-Every response is a Pydantic v2 `InvestigationResponse`:
-
-```python
-InvestigationResponse(
-    request_id, intent, operation,
-    reasoning, executed_operation, confidence,
-    assumptions, supporting_evidence,
-    explanation, raw_sql, raw_params,
-    row_count, columns, placeholder,
-)
-```
-
-Where `operation` is one of `service` / `sql` /
-`placeholder` / `none`. `extra="forbid"` is set on every
-model, so a future caller cannot smuggle unknown keys into
-the response.
-
-### Tests
-
-- 354 tests in `tests/test_ai/` and `tests/test_services/`.
-- 100% line coverage on `ai/schemas/ai.py`,
-  `ai/services/exceptions.py`, `services/ai_query_service.py`.
-- 95–99% coverage on the rest of the new code.
-- A drift test
-  (`tests/test_services/test_schema_registry.py`)
-  parses `database/schema/ksp_real_schema.sql` and asserts
-  every `CREATE TABLE` and its columns is reflected in
-  `SCHEMA_TABLES`. The allowlist can never silently fall out
-  of sync with the real schema.
-- A 17-case SQL-injection battery in
-  `tests/test_ai/test_sql_validation_service.py` proves
-  every common attack string (`DROP TABLE`, stacked
-  statements, `--` comments, `UNION SELECT password FROM
-  users`, `pg_sleep`, `xp_cmdshell`, etc.) is rejected
-  before it reaches the database.
-- The `test_ai_independence.py` test guarantees no future
-  commit breaks the "AI layer is web-framework-, database-,
-  and SDK-independent" rule.
-
-See `backend/ai/README.md` for the full module reference.
+GitHub Actions workflows run on every push:
+- **Backend CI**: Lint (ruff), type check (mypy), tests (pytest), security scan (bandit)
+- **Frontend CI**: Lint (eslint), build (vite), tests
+- **Docker Build**: Build and push images on version tags
 
 ---
 
-## 📜 Project brief reminders
+## Security
 
-> Source: `CLAUDE.md`.
-
-- **Never hardcode prompts in Python.** All four Phase 5
-  prompts live in `backend/ai/prompts/*.md` and are loaded at
-  runtime by `PromptService`.
-- **Never hardcode the LLM provider.** Every service depends
-  on the `AIProvider` ABC, never on `google-genai`,
-  `openai`, or `anthropic` directly. The
-  `tests/test_ai/test_ai_independence.py` test fails the
-  build if anyone violates this.
-- **Every AI request logs timestamp, user, prompt, generated
-  SQL, execution time, success/failure.** The `ChatService`
-  and `GeminiProvider` log on every call.
-- **Every AI answer carries why, which records, confidence,
-  and supporting evidence.** The four Phase 5 prompt files
-  each declare a JSON output schema that includes those
-  fields.
-- **SQL is `SELECT` only.** The Phase 6
-  `SQLValidationService` rejects any forbidden verb before the
-  query reaches the database. The executor re-checks at run
-  time, and the AI layer never imports `sqlalchemy` directly.
+- JWT authentication with access/refresh token flow
+- Role-based access control (admin, sp, dsp, inspector, si, psi, constable)
+- Rate limiting (60 req/min per IP)
+- Security headers (CSP, HSTS, X-Frame-Options, X-Content-Type-Options)
+- CORS restricted to configured origins
+- SQL injection prevention (parameterised queries, read-only SQL execution)
+- Audit logging for all mutating operations
+- Secrets stored in environment variables, never hardcoded
 
 ---
 
-## 📄 License
+## Documentation
+
+- [Deployment Guide](docs/DEPLOYMENT.md)
+- [Backup & Recovery](docs/BACKUP_RECOVERY.md)
+- [API Documentation](http://localhost:8000/docs) (Swagger, when running)
+- [CLAUDE.md](CLAUDE.md) — AI development rules
+
+---
+
+## License
 
 Internal — Karnataka State Police Datathon.

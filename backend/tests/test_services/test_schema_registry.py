@@ -44,14 +44,14 @@ class TestSchemaRegistry:
         assert get_schema_registry() is SCHEMA_TABLES
 
     def test_is_known_table(self):
-        assert is_known_table("CaseMaster") is True
+        assert is_known_table("casemaster") is True
         assert is_known_table("NotATable") is False
         assert is_known_table("") is False
 
     def test_known_columns(self):
-        cols = known_columns("CaseMaster")
-        assert "CaseMasterID" in cols
-        assert "CrimeNo" in cols
+        cols = known_columns("casemaster")
+        assert "casemasterid" in cols
+        assert "crimeno" in cols
 
     def test_known_columns_unknown_table_returns_empty(self):
         assert known_columns("NotATable") == frozenset()
@@ -64,11 +64,11 @@ class TestSchemaRegistry:
     def test_schema_summary_contains_every_column(self):
         summary = get_schema_summary()
         # Spot-check a few representative columns.
-        assert "CaseMasterID" in summary
-        assert "CrimeNo" in summary
-        assert "BriefFacts" in summary
+        assert "casemasterid" in summary
+        assert "crimeno" in summary
+        assert "brieffacts" in summary
         assert "mo_embedding" in summary
-        assert "AccusedName" in summary
+        assert "accusedname" in summary
 
     def test_known_tables_match_ksp_schema(self):
         """The set of registered tables should match the schema.
@@ -77,13 +77,13 @@ class TestSchemaRegistry:
         just confirms every known table has at least its PK
         column registered."""
         expected_pk_columns = {
-            "State": "StateID",
-            "District": "DistrictID",
-            "Unit": "UnitID",
-            "CaseMaster": "CaseMasterID",
-            "Accused": "AccusedMasterID",
-            "Victim": "VictimMasterID",
-            "CrimeHead": "CrimeHeadID",
+            "state": "stateid",
+            "district": "districtid",
+            "unit": "unitid",
+            "casemaster": "casemasterid",
+            "accused": "accusedmasterid",
+            "victim": "victimmasterid",
+            "crimehead": "crimeheadid",
         }
         for table, pk in expected_pk_columns.items():
             assert table in SCHEMA_TABLES
@@ -174,9 +174,9 @@ class TestSchemaDrift:
 
     def test_all_sql_tables_are_registered(self):
         sql_tables = _parse_schema(SCHEMA_FILE)
-        sql_names = set(sql_tables)
+        # Normalise SQL schema names to lowercase for comparison.
+        sql_names = {t.lower() for t in sql_tables}
         registry_names = set(SCHEMA_TABLES)
-        # The audit/Users tables exist in both.
         missing = sql_names - registry_names
         assert not missing, (
             f"Tables in ksp_real_schema.sql but missing from "
@@ -185,7 +185,7 @@ class TestSchemaDrift:
 
     def test_no_extra_tables_in_registry(self):
         sql_tables = _parse_schema(SCHEMA_FILE)
-        sql_names = set(sql_tables)
+        sql_names = {t.lower() for t in sql_tables}
         registry_names = set(SCHEMA_TABLES)
         extra = registry_names - sql_names
         assert not extra, (
@@ -196,11 +196,14 @@ class TestSchemaDrift:
     def test_all_sql_columns_are_registered(self):
         sql_tables = _parse_schema(SCHEMA_FILE)
         for table, sql_cols in sql_tables.items():
-            if table not in SCHEMA_TABLES:
+            table_lower = table.lower()
+            if table_lower not in SCHEMA_TABLES:
                 continue
-            registry_cols = SCHEMA_TABLES[table]
-            missing = sql_cols - registry_cols
+            # Normalise SQL column names to lowercase for comparison.
+            sql_cols_lower = {c.lower() for c in sql_cols}
+            registry_cols = SCHEMA_TABLES[table_lower]
+            missing = sql_cols_lower - registry_cols
             assert not missing, (
-                f"Table {table!r} has columns in the SQL schema that "
+                f"Table {table_lower!r} has columns in the SQL schema that "
                 f"are missing from the registry: {sorted(missing)}"
             )

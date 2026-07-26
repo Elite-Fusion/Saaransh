@@ -102,6 +102,15 @@ class TestPromptServiceRender:
         with pytest.raises(PromptNotFoundError):
             service.render("does_not_exist", foo="bar")
 
+    def test_render_ignores_json_braces_in_prompt_content(self, tmp_prompts_dir):
+        (tmp_prompts_dir / "json_prompt.md").write_text(
+            'Return JSON {"intent": "{{intent}}"} and {name}.',
+            encoding="utf-8",
+        )
+        service = PromptService(prompts_dir=tmp_prompts_dir)
+        out = service.render("json_prompt", name="Officer", intent="case_search")
+        assert out == 'Return JSON {"intent": "case_search"} and Officer.'
+
     def test_render_caches_load(self, tmp_prompts_dir):
         service = PromptService(prompts_dir=tmp_prompts_dir)
         first = service.render("hello", officer_name="A", weekday="B")

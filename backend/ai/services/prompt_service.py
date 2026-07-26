@@ -25,6 +25,7 @@ the kind of leak we want to make impossible.
 from __future__ import annotations
 
 import logging
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -39,6 +40,7 @@ _LOGGER = logging.getLogger("backend.ai.services.prompt_service")
 _DEFAULT_PROMPTS_DIR = (
     Path(__file__).resolve().parent.parent / "prompts"
 )
+_PLACEHOLDER_RE = re.compile(r"\{\{([A-Za-z0-9_]+)\}\}|\{([A-Za-z0-9_]+)\}")
 
 
 class PromptService:
@@ -98,28 +100,24 @@ class PromptService:
         )
         return text
 
-    def render(self, name: str, **vars: Any) -> str:
-        """Load a prompt and apply :py:meth:`str.format` substitutions.
+    def render(self, prompt_name: str, **vars: Any) -> str:
+        """Load a prompt and substitute supported placeholders.
 
-        Args:
-            name: The prompt file stem.
-            **vars: Keyword arguments substituted into the prompt
-                template's ``{{NAME}}`` placeholders. Every
-                placeholder referenced by the template must be
-                supplied; missing keys raise :class:`KeyError`.
-
-        Returns:
-            The rendered prompt as a single string.
-
-        Raises:
-            PromptNotFoundError: ``name`` does not match a file.
-            KeyError: A placeholder in the template has no matching
-                keyword in ``vars``. Letting this propagate keeps
-                the failure mode obvious — a missing variable in a
-                prompt is a programmer error, not a runtime one.
+        The renderer handles both ``{{NAME}}`` and ``{NAME}`` forms,
+        while leaving arbitrary braces such as JSON objects intact.
+        Missing variables still raise :class:`KeyError``.
         """
-        template = self.load(name)
-        return template.format(**vars)
+        template = self.load(prompt_name)
+
+        def replace(match: re.Match[str]) -> str:
+            key = match.group(1) or match.group(2)
+            if key is None:
+                return match.group(0)
+            if key not in vars:
+                raise KeyError(key)
+            return str(vars[key])
+
+        return _PLACEHOLDER_RE.sub(replace, template)
 
     def clear_cache(self) -> None:
         """Drop every cached prompt. Test helper."""
