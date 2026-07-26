@@ -57,7 +57,7 @@ class Settings(BaseSettings):
     db_pool_timeout: int = 30
 
     # ---- CORS ----
-    cors_origins: list[str] = [
+    cors_origins: list[str] | str = [
         "http://localhost:5173",  # Vite dev
         "http://localhost:3000",
     ]
@@ -69,9 +69,17 @@ class Settings(BaseSettings):
             v = v.strip()
             if v.startswith("[") and v.endswith("]"):
                 import json
-                return json.loads(v)
+                try:
+                    res = json.loads(v)
+                    if isinstance(res, list):
+                        return res
+                except Exception:
+                    pass
             return [origin.strip() for origin in v.split(",") if origin.strip()]
-        return v
+        if isinstance(v, list):
+            return v
+        return ["http://localhost:5173", "http://localhost:3000"]
+
 
 
     # ---- Logging ----
