@@ -184,6 +184,26 @@ export default function AIAssistant() {
             ))}
           </div>
 
+          {/* Quick Query Presets */}
+          <div className="px-4 pt-3 pb-1 flex flex-wrap items-center gap-2 border-t border-slate-100 bg-slate-50/30">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Suggested:</span>
+            {[
+              "How many chain-snatching cases occurred in Mysuru during the last seven days?",
+              "Show top crime hotspots in Bengaluru from last month",
+              "Mysuru alli last 7 days ali eshtu chain snatching cases agive?",
+            ].map((preset, pIdx) => (
+              <button
+                key={pIdx}
+                onClick={() => {
+                  setInput(preset);
+                }}
+                className="text-[11px] font-semibold text-slate-600 bg-white hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 border border-slate-200 px-3 py-1 rounded-full shadow-2xs transition-all text-left"
+              >
+                {preset}
+              </button>
+            ))}
+          </div>
+
           {/* Chat Input Bar */}
           <div className="p-4 border-t border-slate-200 bg-slate-50/50 rounded-b-xl flex items-center gap-3">
             <input
@@ -201,6 +221,7 @@ export default function AIAssistant() {
               <Send size={16} />
             </button>
           </div>
+
         </div>
       </div>
     </div>
